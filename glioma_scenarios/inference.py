@@ -124,7 +124,7 @@ class SeedingInverseProblem:
         ll, lp = self.terms(th)
         f = -ll if likelihood_only else -(ll + lp)
         (g,) = torch.autograd.grad(f, th)
-        return float(f), g.numpy().copy()
+        return float(f.detach()), g.numpy().copy()
 
     # ---- MAP -----------------------------------------------------------------------------
     def fit_map(self, theta0: Optional[np.ndarray] = None, n_adam: int = 150, lr: float = 0.05,

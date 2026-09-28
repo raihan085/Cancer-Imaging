@@ -9,7 +9,7 @@ distribution over the MRI-visible compartments at every voxel::
 using nested logits
 
     z_bg  = 0
-    z_ed  = s (N - th_edema)                  N = P + Q + R  (FLAIR abnormality)
+    z_ed  = k log(N / th_edema)               N = P + Q + R  (FLAIR abnormality)
     z_enh = z_ed + s (P + Q - th_enh)         dense viable tumour -> enhancement
     z_nec = z_ed + s (R - th_nec)             necrotic tissue -> necrotic core
 
@@ -45,7 +45,8 @@ DEFAULT_CORRELATION_MM = 4.0
 def compartment_logits(Ptot: Tensor, Q: Tensor, R: Tensor, P: Mapping[str, Tensor]) -> Tensor:
     s = P["obs_slope"]
     N = Ptot + Q + R
-    z_ed = s * (N - P["obs_th_edema"])
+    # log-density logit: healthy tissue (N -> 0) maps to ~0 abnormality probability
+    z_ed = P["obs_log_slope"] * (torch.log(N.clamp_min(0) + 1e-6) - torch.log(P["obs_th_edema"]))
     z_enh = z_ed + s * (Ptot + Q - P["obs_th_enh"])
     z_nec = z_ed + s * (R - P["obs_th_nec"])
     return torch.stack([torch.zeros_like(z_ed), z_nec, z_ed, z_enh])

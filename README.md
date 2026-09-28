@@ -112,6 +112,21 @@ python scripts/select_subset.py --root /data/UPENN-GBM --clinical /data/UPENN-GB
 * The public release has no paired longitudinal treatment-exposure, immune or PK measurements, so
   drug and immune parameters stay literature priors and scenario inputs.
 
+## Main notebook
+
+`main.ipynb` calls the whole package end to end and compares the results: anatomy, synthetic
+ground truth, oracle scenarios, MAP/Laplace vs truth, identifiability, Laplace vs HMC, posterior
+scenarios vs oracle, treatment-equivalence classes, seeding time, the method comparison
+(FV / Fisher-KPP / standard PINN / renewal-aware PINN), segmentation robustness and the report.
+
+* Settings are in the first code cell. `FAST = True` takes roughly 15 minutes on a CPU.
+  `USE_REAL_DATA = True` together with `UPENN_ROOT` adds the UPENN-GBM case analysis.
+* Figures, `report.md` and `notebook_results.json` are written to `results/notebook/`.
+* In VS Code, open the notebook, choose a Python kernel that has `requirements.txt` plus
+  `matplotlib pandas ipykernel` installed, and run all cells.
+* The notebook is generated from `scripts/build_notebook.py`. Edit that script, then regenerate
+  with `python scripts/build_notebook.py`.
+
 ## Running
 
 ```bash
