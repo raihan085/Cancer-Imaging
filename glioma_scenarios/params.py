@@ -118,7 +118,8 @@ PARAM_SPECS: Dict[str, ParamSpec] = {
         _p("obs_th_edema", 0.08, 0.5, OBS, "-", "total density at which FLAIR abnormality appears"),
         _p("obs_th_enh", 0.2, 0.3, OBS, "-", "viable density at which enhancement dominates"),
         _p("obs_th_nec", 0.2, 0.4, OBS, "-", "necrotic density at which necrotic core dominates"),
-        _p("obs_slope", 25.0, 0.3, OBS, "-", "logit slope of the observation model"),
+        _p("obs_slope", 25.0, 0.3, OBS, "-", "logit slope of the enhancing/necrotic observation terms"),
+        _p("obs_log_slope", 4.0, 0.3, OBS, "-", "log-density logit slope of the FLAIR-abnormality term"),
         _p("obs_blur_mm", 1.5, 0.4, OBS, "mm", "partial-volume blur (Gaussian sigma)"),
     ]
 }

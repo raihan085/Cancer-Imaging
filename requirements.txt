@@ -5,3 +5,8 @@ nibabel>=4.0
 pytest>=7
 # optional: pilot download from the NCI Imaging Data Commons
 idc-index>=0.5
+# notebook
+matplotlib>=3.6
+pandas>=1.5
+ipykernel>=6
+nbformat>=5
