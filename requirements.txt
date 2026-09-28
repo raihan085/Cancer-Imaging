@@ -1,0 +1,7 @@
+numpy>=1.23
+scipy>=1.9
+torch>=2.0
+nibabel>=4.0
+pytest>=7
+# optional: pilot download from the NCI Imaging Data Commons
+idc-index>=0.5
