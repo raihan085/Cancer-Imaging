@@ -222,6 +222,22 @@ true environmental share of 20 % the estimates run from 25 % to 64 %, and with 7
 87 %. The individual rates are off by 36–154 % ($\beta_1$) and 35–250 % ($\beta_2$). The data
 determines how much transmission there is, not which route carries it. One of the 30 synthetic
 datasets (Hadramaut, almost all zeros) produced an epidemic blow-up of the kind described in §8.
+
+**Recovery by the PINN arms.** On the same synthetic data, with $\max\mathcal R=2.0$ in truth:
+
+| | median rel. error in $\mathcal R(t)$ | median peak $\mathcal R$ | estimated env. share (truth 20 % / 70 %) |
+|---|---|---|---|
+| deterministic | 8–10 % | 2.3 | 36 % / 60 % (range 3–98 %) |
+| DPINN | 174–311 % | 6.6–7.6 | 55 % / 63 % |
+| FF-PINN | 100 % | 3.8–4.0 | **71 % / 71 %** |
+
+FF-PINN returns a 71 % environmental share **whatever the truth is**: the split it reports comes
+from the architecture, not from the data. Both networks get $\mathcal R(t)$ wrong in the same way.
+At the four larger governorates they drive susceptibles almost to zero (median final $S$
+0.000–0.055, where the generating model, and the deterministic fit, keep 0.69–0.76), run
+$\mathcal R$ at 3–7 early and then let it collapse to ≈ 0 as $S$ runs out. Since the counts are
+still fitted, depleting susceptibles that never appear as cases is a degree of freedom the soft
+physics does not close (see the mass-balance check in §12).
 """
 
 TEXT["cori"] = r"""
@@ -285,7 +301,27 @@ relative to the baseline fit for that city and arm.
 
 Diffusion is the remaining fixed choice; it only exists in the spatial model and is swept in §10.
 """
-TEXT["sensitivity_after"] = PENDING
+TEXT["sensitivity_after"] = r"""
+**The deterministic arm is robust to every fixed choice except the objective.** Across the five
+governorates the median change from baseline is within ±1.5 % in MAE and ±2.2 % in mean
+$\mathcal R(t)$ for the initial-condition variants (`trunc`, `age_eq`, `age_ln`), the observable
+(`onset`), winsorisation, the Fourier order (`M2`, `M6`) and the Poisson likelihood. Only weighted
+least squares breaks it (+77 % MAE, and $\mathcal R$ inflated up to 80×), which is why the original
+study moved to a deviance. Even where $\mathcal R(t)$ barely moves, the environmental share swings
+from 0 to 0.9 between variants at the same governorate: the split is not determined by the data,
+so any change in the setup can move it.
+
+**The PINN arms' $\mathcal R(t)$ is set by tuning, not by the data.** With in-sample fit nearly
+unchanged:
+
+* the renewal-coupling weight moves FF-PINN's mean $\mathcal R$ from 3.5 to **213** at Al Bayda and
+  from 2.5 to 111 at Hajjah (`wren5`), and DPINN's from 2.7 to 22 at Al Bayda (`wren80`);
+* reverting to the Poisson likelihood moves DPINN's mean $\mathcal R$ at Al Hudaydah from 3.7 to 28,
+  and lets FF-PINN cut its in-sample MAE by 75–88 % at the four larger governorates, i.e. fit the
+  reporting noise more tightly (the NB likelihood was right to stop it);
+* the Fourier order `M` has no effect on DPINN at all, as it should, since DPINN's $\beta$ is a free
+  network and not a series. This is a control: it confirms the variants are applied as intended.
+"""
 
 TEXT["diagnostics"] = r"""
 ## 7. Residual diagnostics
@@ -437,4 +473,28 @@ TEXT["surfaces_after"] = r"""
   transmission.
 """
 
-TEXT["conclusions"] = "## 12. What the extended analysis shows\n\n" + PENDING
+TEXT["massbalance"] = r"""
+## 12. A mass-balance check that separates the arms
+
+Every infection in this model is a reported case: the bulletin observable is the force of
+infection on susceptibles, $H=S\,[\dots]$. So over the window, the fall in susceptibles
+$S(0)-S(T)$ must equal the cumulative reported attack rate, up to recruitment and background
+mortality (about $10^{-4}$ here). A forward solver satisfies this by construction. A network that
+enforces the $S$ equation only as a penalty need not, and if it does not, susceptibles can leave
+without ever being counted, which is exactly the freedom that lets $\mathcal R$ inflate. The table
+gives the depletion (seed median and range) against the reported attack rate; a ratio of 1 is
+consistent.
+
+**The deterministic arm passes everywhere** (ratio 1.00–1.11). **Every PINN arm fails, in both
+directions.** At Hajjah, DPINN-FS, F-DPINN and FF-PINN remove 99.8 % of susceptibles (ratio ≈ 20)
+while 5 % of the population was reported infected; at Al Bayda and Al Hudaydah, FF-PINN's
+susceptibles barely move (ratio 0.03–0.09) although 4–5 % of the population was infected; and at
+Hadramaut DPINN-FS removes 82 % against a 0.07 % attack rate. Across seeds, the depletion at a single
+governorate ranges from 0 to 0.99 for most PINN arms. Cases appear without depleting anyone, or
+susceptibles vanish without becoming cases. This is the mechanism behind every $\mathcal R$ result
+above: $\mathcal R(t)$ multiplies by $S$, and the networks fit the counts with susceptibles that
+are not conserved, so nothing anchors it. Checking $S(0)-S(T)$ against the attack rate is a one-line
+test any physics-informed fit of this system should report.
+"""
+
+TEXT["conclusions"] = "## 13. What the extended analysis shows\n\n" + PENDING

@@ -336,6 +336,12 @@ display(Image(f"{FIG}/E11c_surfaces_focus.png"))
 display(fmt(A.surface_errors(panel, ff, cities=FOCUS), 4))
 ''')
 md(TEXT["surfaces_after"])
+md(TEXT["massbalance"])
+code('''
+mb = A.mass_balance(recs, idx, panel)
+mb["arm"] = pd.Categorical(mb.arm, A.ORDER)
+display(fmt(mb.sort_values(["city", "arm"]), 4))
+''')
 md(TEXT["conclusions"])
 
 nb = nbf.v4.new_notebook(cells=C)

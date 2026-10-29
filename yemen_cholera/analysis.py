@@ -787,3 +787,29 @@ def surface_errors(panel, fields, cities=None):
                          nRMSE=float(np.sqrt(np.mean(e ** 2)) / np.sqrt(np.mean(obs[m] ** 2))),
                          corr=float(np.corrcoef(F[m], obs[m])[0, 1])))
     return pd.DataFrame(rows)
+
+
+# ------------------------------------------------------------------ mass balance
+def mass_balance(recs, idx, panel, cities=FOCUS, arms=("det", *PINN)):
+    """Susceptible depletion over the window against the cumulative attack rate.
+
+    Every infection in this model is an observed case (H = S * force of
+    infection is what a bulletin reports), so S(0) - S(T) must equal the
+    reported attack rate up to recruitment and mortality (~1e-4 here). A
+    solver satisfies it by construction; a soft-physics network need not.
+    Returns one row per (city, arm) with the seed median and range."""
+    rows = []
+    for c in cities:
+        g = panel.names.index(c)
+        attack = float(panel.dC_raw[panel.gov == g].sum() / panel.pop[g])
+        for a in arms:
+            ds = select(recs, idx, city=c, arm=a, fold=-1, variant="base", truth="")
+            ds = [d for d in ds if d.get("S") is not None]
+            if not ds:
+                continue
+            drop = np.array([float(d["S"][0] - d["S"][-1]) for d in ds])
+            rows.append(dict(city=c, arm=a, n=len(ds), attack_rate=attack,
+                             S_drop_median=float(np.median(drop)),
+                             S_drop_min=float(drop.min()), S_drop_max=float(drop.max()),
+                             ratio_median=float(np.median(drop) / max(attack, 1e-12))))
+    return pd.DataFrame(rows)
