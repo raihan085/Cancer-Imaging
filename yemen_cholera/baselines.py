@@ -12,7 +12,7 @@ Poisson.
 
 sir     A plain SIR model with a time-varying transmission rate
             S' = -beta(t) S I,   I' = beta(t) S I - gamma I,   H = beta S I
-        beta(t) = softplus(order-M Fourier series + trend), gamma = 1/7 d,
+        beta(t) = 5 gamma * sigmoid(order-M Fourier series + trend), so R0 <= 5,
         Poisson deviance. The simplest mechanistic model with a reproduction
         number, R(t) = beta(t) S(t) / gamma, and no age structure, no
         environmental route.
@@ -145,8 +145,17 @@ class SIRBaseline:
             cols += [np.sin(2 * np.pi * m * t / self.T), np.cos(2 * np.pi * m * t / self.T)]
         return np.column_stack(cols)
 
+    # beta = BETA_MAX * sigmoid(g), so R0 = beta/gamma never exceeds R0_MAX.
+    # Without a bound the SIR model (no age structure, S ~ 1) can blow up in a
+    # sparse stretch of record, and under a negative-binomial deviance a zero
+    # count costs only ~2k log(1 + lam/k) however large lam gets: at Sa'ada two
+    # holdout folds predicted 14% of the population infected per day.
+    # R0_MAX = 5 is the top of the published range for cholera.
+    R0_MAX = 5.0
+
     def beta(self, theta):
-        return np.logaddexp(0.0, self.X @ theta) + 1e-12
+        bmax = self.R0_MAX * GAMMA_SIR
+        return bmax / (1.0 + np.exp(-(self.X @ theta))) + 1e-12
 
     def solve(self, theta, S0, I0):
         b = self.beta(theta)
@@ -191,8 +200,9 @@ class SIRBaseline:
 
         # seed: best constant beta on a coarse grid
         best = None
-        for b0 in np.geomspace(0.03, 1.5, 25):
-            th = np.zeros(self.X.shape[1]); th[0] = np.log(np.expm1(b0))
+        for b0 in np.geomspace(0.03, 0.7, 25):
+            th = np.zeros(self.X.shape[1])
+            th[0] = np.log(b0 / (self.R0_MAX * GAMMA_SIR - b0))      # inverse of the bounded link
             v = float(np.sum(resid(th) ** 2))
             if best is None or v < best[0]:
                 best = (v, th)

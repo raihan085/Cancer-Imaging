@@ -138,7 +138,26 @@ three windows where published estimates exist, next to the model-free Cori estim
 record's own attack rates against those WHO EMRO reported for the second wave. The attack rates
 check the data rather than the method: if they did not match, no fitted quantity could.
 """
-TEXT["literature_after"] = PENDING
+TEXT["literature_after"] = r"""
+**Against published Yemen estimates** (Camacho et al. 2018): $R_t$ above 2 in May 2017, between 1
+and 2 after late May, and below 1 by October. The record here opens on 22 May, after the surge. The
+model-free national $R_t$ is 1.43 over the first three weeks, 1.00 over the summer and 0.88 in
+October, matching all three published statements. The deterministic arm gives 1.04–1.11 early,
+1.00–1.02 in summer and 0.88–0.97 in October at the four larger focus governorates: correct in the
+summer and October windows, and low in the opening weeks for the reason given in §5.
+
+**The data check passes.** The record's second-wave attack rates are within 2–6 % of those WHO
+EMRO reported: Amran 864 vs 902 per 10,000, Al Mahwit 827 vs 879, Al Dhale'e 625 vs 640, Dhamar 505
+vs 525.
+
+**Recovery of known values (deterministic arm).** On synthetic counts with literature-calibrated
+$\mathcal R(t)$ and the record's own negative-binomial noise, **$\mathcal R(t)$ is recovered**:
+median relative error 4–16 % across governorates and both truths. **The route split is not**: with a
+true environmental share of 20 % the estimates run from 25 % to 64 %, and with 70 % from 37 % to
+87 %. The individual rates are off by 36–154 % ($\beta_1$) and 35–250 % ($\beta_2$). The data
+determines how much transmission there is, not which route carries it. One of the 30 synthetic
+datasets (Hadramaut, almost all zeros) produced an epidemic blow-up of the kind described in §8.
+"""
 
 TEXT["cori"] = r"""
 ## 5. An outside reference for $\mathcal R(t)$
@@ -154,7 +173,24 @@ The table scores each arm's $\mathcal R(t)$ (seed median for PINNs) against the 
 absolute difference, median log-ratio (0 = no bias), the fraction of days inside the Cori 95 %
 credible interval, and the rank correlation.
 """
-TEXT["cori_after"] = PENDING
+TEXT["cori_after"] = r"""
+**After the first three weeks, the model's $\mathcal R(t)$ and the model-free reference agree.**
+Over day 30–100 the deterministic arm gives 1.00–1.02 where the Cori estimate gives 1.02–1.05 at
+the four larger focus governorates, and in October 0.88–0.97 against 0.87–0.96. Over all 21
+governorates the median log-ratio between the deterministic arm and Cori is −0.01 (essentially no
+bias), the mean absolute difference 0.16. The model is **smoother**: its $\mathcal R(t)$ is an
+order-4 Fourier series, so it sits inside the Cori 95 % interval on only about a third of days,
+because the Cori curve follows week-to-week reporting noise.
+
+The one systematic gap is **the first three weeks**: Cori gives 1.4–1.8 at the three largest
+governorates, the deterministic arm 1.08–1.11. Part of it is the reference itself: with a 3.7-day instead of a
+5-day serial interval the national early value falls from 1.43 to 1.25. The rest is the window
+start: the record opens on the decline after the May surge, and a smooth $\beta(t)$ anchored on an
+initial condition near quasi-equilibrium does not reproduce a short early excess.
+
+Hadramaut (589 cases in total) is too sparse for either estimate: Cori is undefined for most of the
+window and the model's band is wide.
+"""
 
 TEXT["sensitivity"] = r"""
 ## 6. Sensitivity to the fixed modelling choices
@@ -186,7 +222,18 @@ right), the same quantity under a Poisson variance for comparison (`dispersion_v
 pilot's ~80), lag-1 autocorrelation and a Ljung–Box test over 10 lags, and randomized quantile
 residuals (Dunn & Smyth), standard normal under a correct model (`rqr_sd` ≈ 1, Shapiro p not small).
 """
-TEXT["diagnostics_after"] = PENDING
+TEXT["diagnostics_after"] = r"""
+**The negative-binomial likelihood fixes most of the mis-specification; what remains is reporting.**
+Under a Poisson variance the deterministic arm's residuals are 69× over-dispersed (median over 21
+governorates); under the negative-binomial variance actually used, $\hat\phi\approx2.6$ with a
+median size $k\approx9.7$. The randomized quantile residuals are still too wide (sd ≈ 1.8 rather than
+1) and non-normal, and **lag-1 autocorrelation is negative** (≈ −0.22) with a significant Ljung–Box
+test at about half the governorates. A negative lag-1 correlation is the signature of batch
+reporting: an interval that over-reports a backlog is followed by one that under-reports. No
+transmission model removes that; a reporting model (delay or backlog) or weekly aggregation would.
+The spline baseline shows the same pattern, which confirms it belongs to the data, not to the
+SEIP structure.
+"""
 
 TEXT["baselines"] = r"""
 ## 8. Simple baselines
@@ -199,7 +246,22 @@ TEXT["baselines"] = r"""
 Both run through the same rotated 4-fold holdout as every other arm. Held-out MAE at all 21
 governorates:
 """
-TEXT["baselines_after"] = PENDING
+TEXT["baselines_after"] = r"""
+**The simple baselines are as good as the age-structured model at predicting held-out
+bulletins.** Over all 21 governorates the plain SIR model's held-out MAE is a median 0.977× the
+deterministic SEIP arm's (range 0.86–1.19), and it is the best of the three at 17 governorates; the
+spline, with no epidemic mechanism at all, is 0.989× (0.85–1.11). In-sample to held-out degradation
+is 1.08–1.14 for all three. The data term therefore does not reward the age structure, the
+environmental route or the renewal condition: on this record they are carried by the model
+because the question needs them (§3, §4), not because the counts demand them.
+
+*Note on the SIR baseline.* Its $\beta$ is bounded so that $\mathcal R_0\le5$, the top of the published
+range for cholera. Unbounded, it blew up in two holdout folds at Sa'ada (14 % of the population
+infected per day near day 230). Under the negative-binomial deviance a zero count costs only
+$2k\log(1+\lambda/k)$ however large the prediction $\lambda$ gets, so a model that can explode is
+barely penalised for doing so in a sparse stretch of record. The age-structured arms did not do this
+on the real record; the PINN arms are checked in §1.
+"""
 
 TEXT["allcities"] = r"""
 ## 9. All 21 governorates
@@ -207,7 +269,15 @@ TEXT["allcities"] = r"""
 The deterministic SEIP arm (with its delta-method band) and the SIR baseline at every governorate,
 against the Cori reference. Panels are ordered by distance from Sana'a.
 """
-TEXT["allcities_after"] = PENDING
+TEXT["allcities_after"] = r"""
+**At every governorate with enough cases, the deterministic arm's $\mathcal R(t)$ hovers around 1
+from June onward and drops below 1 in autumn, tracking the model-free reference.** The deterministic
+SEIP and SIR curves are close to each other everywhere: given the same counts, the age structure
+changes the shape of $\mathcal R(t)$ very little. The delta-method band on $\mathcal R(t)$ is narrow
+wherever counts are large and opens up at the sparse governorates (Hadramaut, Al Maharah, Shabwah),
+which is the honest outcome. The fitted environmental share, by contrast, swings between
+governorates with no geographic pattern, consistent with §4: it is not identified.
+"""
 
 TEXT["spatial"] = r"""
 ## 10. Transmission that varies by location, and a network instead of an axis
@@ -236,7 +306,34 @@ COD boundaries already in the data), and the mixing fraction $m$ estimated:
 AIC is deviance + 2 × parameters. In the network models $\mathcal R_g(t)$ uses the local
 $\beta_g$ and $S_g$; with small $m$ it is the within-governorate reproduction number.
 """
-TEXT["spatial_after"] = PENDING
+TEXT["spatial_after"] = r"""
+**The network geometry is what fixes the spatial model.** Ranked by AIC (deviance + 2 × parameters):
+
+| model | parameters | AIC | nRMSE |
+|---|---|---|---|
+| `network` | 42 | **18,190** | **0.551** |
+| `isolated` (no mixing) | 41 | 18,985 | 0.559 |
+| `governorate_D5` (1-D axis, $D=5$) | 41 | 21,111 | 0.595 |
+| `governorate_D50` | 41 | 21,673 | 0.613 |
+| `governorate_D250` | 41 | 22,099 | 0.620 |
+| `network_shared` (one national $\beta$) | 21 | 23,604 | 0.597 |
+| `shared_D50` (original model) | 20 | 26,952 | 0.663 |
+
+* **Geometry.** Moving from the distance-from-Sana'a axis to one node per governorate is the largest
+  single gain. Even with no mixing at all (`isolated`), the network form beats every 1-D diffusion
+  fit; on the axis, governorates 2–5 km apart share grid cells and blend into each other.
+* **Coupling.** Estimated mixing is small: 0.76 % of a governorate's infection pressure comes from
+  elsewhere. It is still worth 795 AIC units for one parameter.
+* **Diffusion on the axis** is best at the smallest value tried ($D=5$): the data prefers less
+  spatial spreading, consistent with the small estimated mixing.
+* **Per-governorate scales** are worth 5,400 AIC units (`network` against `network_shared`), yet the
+  fitted scales are modest (0.85–1.04). Most of each governorate's level is already carried by its
+  own data-anchored initial state; the scales correct the time course around it.
+
+Every governorate's level bias (fitted ÷ observed mean) now lies between 0.76 and 1.32, against
+0.31–5.12 for the original shared model; Shabwah goes from 5.1× to 0.99×, Sa'ada from 2.9× to
+0.91×, Marib from 2.0× to 0.87×.
+"""
 
 TEXT["surfaces"] = r"""
 ## 11. Observed against fitted surfaces
@@ -248,6 +345,17 @@ was fitted to. The lower row is the signed residual relative to each governorate
 The 3-D view renders the same interval fields. The per-city fields stitch 21 independent fits
 together; the 1-D diffusion and network fields each come from one model of the whole country.
 """
-TEXT["surfaces_after"] = PENDING
+TEXT["surfaces_after"] = r"""
+**Observed against fitted fields** (cell-wise over all 21 governorates):
+
+* The 21 separate per-governorate fits reproduce the observed field best (nRMSE 0.42, correlation
+  0.84). They also use 21 separate transmission histories, about 420 parameters.
+* Of the whole-country models, the **network model** is best (nRMSE 0.54, correlation 0.73) with 42
+  parameters, against 0.65 and 0.56 for the original shared-$\beta$ diffusion model.
+* What no model reproduces is the vertical striping of the observed field: synchronised reporting
+  releases across governorates (for example around day 130). Those are visible as alternating
+  red/blue columns in every residual panel and are the reporting artefact §7 identifies, not
+  transmission.
+"""
 
 TEXT["conclusions"] = "## 12. What the extended analysis shows\n\n" + PENDING
