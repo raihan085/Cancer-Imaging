@@ -119,7 +119,34 @@ it). Errors are pooled over the four folds. Each PINN arm was run with 10 seeds 
 spline, SIR and deterministic arms are deterministic. `vs_det` is held-out MAE relative to the
 deterministic arm; `degradation` is held-out over in-sample MAE.
 """
-TEXT["holdout_after"] = PENDING
+TEXT["holdout_after"] = r"""
+**DPINN generalises; FF-PINN does not.** Pooled over the four rotated folds and ten seeds, held-out
+MAE relative to the deterministic arm:
+
+| | Al Hudaydah | Hajjah | Dhamar | Al Bayda | Hadramaut |
+|---|---|---|---|---|---|
+| DPINN | 0.98 | **0.88** | 0.95 | 0.97 | 1.09 |
+| FF-PINN | 1.00 | 1.17 | 1.16 | **1.81** | 0.91 |
+| SIR baseline | 0.96 | 0.96 | 0.95 | 0.99 | 0.96 |
+| spline baseline | 0.98 | 1.01 | 1.00 | 0.99 | 0.99 |
+
+* **DPINN** beats the deterministic arm out of sample at four of five governorates, and it does so
+  with **every one of its ten seeds** (Wilcoxon p = 0.002 at each). It also degrades least from
+  training to held-out data (1.02–1.08×). The margin is small (2–12 %), and the plain SIR baseline
+  achieves most of it (4–5 %), so it is a modest gain of a smooth curve-fitter, not of the age
+  structure.
+* **FF-PINN** is the best in-sample arm (§1) and the worst out of sample: 1.16–1.81× the
+  deterministic arm's held-out error at three of five governorates, with **every seed** worse at
+  each of those three (p = 0.002), and a training-to-held-out degradation of 1.8–5.3× at the four
+  larger governorates. Its in-sample
+  advantage is overfitting to reporting noise, as §7's residuals already suggested. The exception is
+  Hadramaut (0.91×), the sparsest record, where every arm's error is tiny in absolute terms.
+* Seed-to-seed spread of held-out error is under 1 % for DPINN and up to 30 % for FF-PINN at Al
+  Bayda: the Fourier-feature network's out-of-sample behaviour also depends more on initialisation.
+
+DPINN-FS and F-DPINN, the two cells that separate the state embedding from the $\beta$ basis, are
+the last block of the queue; their rows complete the table when it finishes.
+"""
 
 TEXT["bands"] = r"""
 ## 3. Uncertainty bands on $\beta_1(t)$, $\beta_2(t)$ and $\mathcal R(t)$
