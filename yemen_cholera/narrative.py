@@ -83,7 +83,31 @@ governorate, with the training budget unchanged from the original notebook (800 
 search and is deterministic. `MAE_cv` is the seed-to-seed coefficient of variation of the in-sample
 error; `R_max_lo`–`R_max_hi` is the range over seeds of the largest $\mathcal R(t)$ in the window.
 """
-TEXT["seeds_after"] = PENDING
+TEXT["seeds_after"] = r"""
+**Architecture differences are far larger than initialisation noise, so the comparison between
+arms is real.** Seed-to-seed spread in log in-sample MAE is 0.02–0.05 within an arm; the spread
+between arms is 0.13–0.41, two to twenty times larger, at every governorate.
+
+**In sample, only the Fourier-feature state networks beat the deterministic arm.** Median in-sample
+MAE relative to the deterministic arm:
+
+| | DPINN | DPINN-FS | F-DPINN | FF-PINN |
+|---|---|---|---|---|
+| four larger governorates | 1.00–1.02 | 1.00–1.03 | **0.43–0.72** | **0.62–0.89** |
+| Hadramaut | 1.22 | 1.27 | 1.01 | 1.02 |
+
+The plain-state networks reproduce the deterministic fit and no more; the Fourier-feature ones fit
+more of the data. Whether that is signal or noise is §2's question, and §7 already gives a warning:
+F-DPINN's residuals have dispersion 0.84 (below the noise level the likelihood assumes) and a lag-1
+autocorrelation of −0.55, the pattern of a model that follows individual reporting spikes.
+
+**The seed spread of the *reproduction number* is not small.** Within an arm the largest
+$\mathcal R(t)$ in the window varies by up to an order of magnitude across seeds (F-DPINN at Al
+Bayda: 34–122; DPINN at Al Bayda: 2.0–21) and, at Hadramaut, DPINN-FS ranges from 4.7 to 78,590. Two seeds that fit
+the counts equally well can disagree by orders of magnitude on $\mathcal R$: the amplitude
+degeneracy of the original study survives both the hard initial condition and the
+negative-binomial likelihood.
+"""
 
 TEXT["holdout"] = r"""
 ## 2. Fuller holdout: rotated 4-fold interleave
@@ -115,7 +139,21 @@ Two kinds of band, labelled in every legend because they are not the same object
 The black curve in the $\mathcal R$ row is the model-free Cori estimate of §5. The table gives the
 median band width as the ratio upper/lower: 1 is a perfectly determined curve.
 """
-TEXT["bands_after"] = PENDING
+TEXT["bands_after"] = r"""
+**The deterministic arm's $\mathcal R(t)$ is well determined; its $\beta_1$ and $\beta_2$ are not.**
+Its delta-method band on $\mathcal R(t)$ has a median width (upper ÷ lower) of 1.15–2.2 at the four
+larger governorates. For the two rates separately it is $10^3$ to unbounded for $\beta_2$, and for
+$\beta_1$ anywhere from 1.2 to $10^{15}$: $\beta_1$ is only well determined where the fit has pushed
+$\beta_2$ onto its positivity floor (Dhamar, Al Bayda), so that one route carries everything. The
+data fixes the weighted sum, not the split.
+
+**PINN bands are narrow, and that is not evidence of accuracy.** The seed bands of FF-PINN are the
+tightest of all (width 1.2–1.8 for $\mathcal R$, $\beta_1$, $\beta_2$ at the three largest
+governorates),
+yet §5 shows FF-PINN's $\mathcal R(t)$ sits about 2× above the model-free reference everywhere. Ten
+seeds converging on the same answer show the optimiser is repeatable, not that the answer is right;
+a seed band measures initialisation spread, not uncertainty about transmission.
+"""
 
 TEXT["recovery"] = r"""
 ## 4. Does the method recover known values?
@@ -190,6 +228,15 @@ initial condition near quasi-equilibrium does not reproduce a short early excess
 
 Hadramaut (589 cases in total) is too sparse for either estimate: Cori is undefined for most of the
 window and the model's band is wide.
+
+**Every PINN arm puts $\mathcal R(t)$ well above the reference.** Median log-ratio against Cori, by
+arm over the five focus governorates: deterministic −0.08 to +0.01 and SIR −0.12 to +0.00 (unbiased),
+against FF-PINN +0.65 to +1.20, DPINN-FS +0.64 to +1.93, DPINN +0.88 to +1.11 and F-DPINN +1.40 to
++3.95, i.e. reproduction numbers about 2× to 50× too high. They sit inside the Cori 95 % interval on
+0–22 % of days. The PINN arms also put 67–100 % of transmission on the environmental route at every
+governorate. Since predicted incidence is fine (§1), this is the amplitude degeneracy: the
+networks reach the observed counts with too much transmission acting on states that are too small,
+and nothing in the soft physics penalises that trade.
 """
 
 TEXT["sensitivity"] = r"""
@@ -233,6 +280,11 @@ reporting: an interval that over-reports a backlog is followed by one that under
 transmission model removes that; a reporting model (delay or backlog) or weekly aggregation would.
 The spline baseline shows the same pattern, which confirms it belongs to the data, not to the
 SEIP structure.
+
+The PINN arms split by state embedding. DPINN and DPINN-FS look like the deterministic arm
+(dispersion ≈ 2.7). The Fourier-feature arms have **lower** dispersion (FF-PINN 1.7, F-DPINN 0.84)
+and **more negative** lag-1 autocorrelation (−0.43, −0.55): they absorb part of the reporting noise
+into the fitted curve, so consecutive residuals alternate in sign even more strongly.
 """
 
 TEXT["baselines"] = r"""

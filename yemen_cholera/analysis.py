@@ -339,7 +339,7 @@ def fig_bands(recs, idx, path, cities=FOCUS, arms=("det", "dpinn", "ff"), cori=N
                 ax.legend(fontsize=6.6, framealpha=0.9, loc="upper right")
     fig.suptitle("Transmission rates and reproduction number with uncertainty bands. "
                  "PINN bands: 95% range over 10 seeds; deterministic: 95% delta-method "
-                 "band (quasi-Poisson). Bands drawn at most x1000 around the curve.", y=1.005, fontsize=10)
+                 "band (negative binomial, dispersion-scaled). Bands drawn at most x1000 around the curve.", y=1.005, fontsize=10)
     fig.tight_layout(); fig.savefig(path); plt.close(fig)
 
 
