@@ -5,3 +5,4 @@ jobs_*.txt
 figures/
 yemen_cholera_extended.ipynb
 results_poisson_pilot/
+results_sir_unbounded/
