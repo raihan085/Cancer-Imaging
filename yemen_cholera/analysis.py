@@ -301,6 +301,10 @@ def fig_bands(recs, idx, path, cities=FOCUS, arms=("det", "dpinn", "ff"), cori=N
                 if b is None:
                     continue
                 t, lo, mid, hi, kind = b
+                # draw at most x1000 either side of the curve: a band wider than
+                # that is uninformative, and leaving it uncapped (a beta on its
+                # positivity floor gives 1e-48..1e40) flattens every other curve
+                lo = np.maximum(lo, mid / 1e3); hi = np.minimum(hi, mid * 1e3)
                 ax.fill_between(t, lo, hi, color=ARM[a][1], alpha=0.18, lw=0)
                 ax.plot(t, mid, color=ARM[a][1], ls=ARM[a][2], lw=1.2,
                         label=f"{ARM[a][0]} ({kind})")
@@ -321,7 +325,7 @@ def fig_bands(recs, idx, path, cities=FOCUS, arms=("det", "dpinn", "ff"), cori=N
                 ax.legend(fontsize=6.6, framealpha=0.9, loc="upper right")
     fig.suptitle("Transmission rates and reproduction number with uncertainty bands. "
                  "PINN bands: 95% range over 10 seeds; deterministic: 95% delta-method "
-                 "band (quasi-Poisson).", y=1.005, fontsize=10)
+                 "band (quasi-Poisson). Bands drawn at most x1000 around the curve.", y=1.005, fontsize=10)
     fig.tight_layout(); fig.savefig(path); plt.close(fig)
 
 

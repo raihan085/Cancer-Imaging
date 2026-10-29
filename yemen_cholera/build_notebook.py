@@ -36,7 +36,28 @@ S = A.load_spatial("results/spatial")
 panel = data_io.load_panel("data_real", verbose=False)
 FOCUS = A.FOCUS
 print(f"{len(recs)} result files; spatial fits: {sorted(S)}")
-print(idx.groupby(["arm"]).size().to_dict())
+''')
+md(TEXT["status"])
+code('''
+P = idx.arm.isin(A.PINN); B = idx.variant == "base"; T = idx.truth == ""
+expected = [
+    ("deterministic, spline, SIR: 21 governorates x (full + 4 folds)", 315,
+     (~P & B & T & (idx.seed == 0)).sum()),
+    ("PINN, full record: 5 cities x 4 arms x 10 seeds", 200, (P & B & T & (idx.fold < 0)).sum()),
+    ("PINN holdout, DPINN and FF-PINN: 5 x 2 x 10 seeds x 4 folds", 400,
+     (idx.arm.isin(["dpinn", "ff"]) & B & T & (idx.fold >= 0)).sum()),
+    ("PINN holdout, DPINN-FS and F-DPINN: 5 x 2 x 10 x 4", 400,
+     (idx.arm.isin(["dpinn_fs", "fdpinn"]) & B & T & (idx.fold >= 0)).sum()),
+    ("recovery, deterministic: 5 x 2 truths x 3", 30, (~P & (idx.truth != "") & idx.city.isin(FOCUS)).sum()),
+    ("recovery, DPINN and FF-PINN: 5 x 2 x 2 truths x 3", 60, (P & (idx.truth != "")).sum()),
+    ("sensitivity, deterministic: 5 x 8 variants", 40,
+     ((idx.arm == "det") & ~B & idx.city.isin(FOCUS)).sum()),
+    ("sensitivity, DPINN and FF-PINN: 5 x 2 x 4 variants", 40, (P & ~B).sum()),
+    ("spatial fits (shared / smooth / governorate, D sweep)", 7, len(S)),
+]
+st_ = pd.DataFrame(expected, columns=["block", "planned", "done"])
+st_["complete"] = (st_.done >= st_.planned).map({True: "yes", False: "pending"})
+display(fmt(st_, 0))
 ''')
 
 md(TEXT["cities"])
@@ -56,8 +77,11 @@ seeds = A.seed_table(recs, idx)
 ss = A.seed_summary(seeds[seeds.arm.isin(A.PINN + ["det"])])
 display(fmt(ss[["city", "arm", "n_seeds", "MAE_mean", "MAE_sd", "MAE_cv", "nRMSE_mean",
                 "R_mean", "R_max_med", "R_max_lo", "R_max_hi", "env_mean", "env_sd"]], 4))
-A.fig_seed_spread(seeds[seeds.arm.isin(A.PINN)], f"{FIG}/E1_seed_spread.png")
-display(Image(f"{FIG}/E1_seed_spread.png"))
+if seeds.arm.isin(A.PINN).any():
+    A.fig_seed_spread(seeds[seeds.arm.isin(A.PINN)], f"{FIG}/E1_seed_spread.png")
+    display(Image(f"{FIG}/E1_seed_spread.png"))
+else:
+    print("PINN seed runs not finished yet")
 ''')
 md(TEXT["seeds_after"])
 
@@ -111,15 +135,18 @@ md(TEXT["bands_after"])
 md(TEXT["recovery"])
 code('''
 rt = A.recovery_table(recs, idx)
-rsum = (rt.groupby(["truth", "arm"])
-          .agg(n=("seed", "size"), true_share=("true_share", "first"),
-               est_share_mean=("est_share", "mean"), est_share_sd=("est_share", "std"),
-               R_relerr=("R_relerr", "median"), beta1_relerr=("beta1_relerr", "median"),
-               beta2_relerr=("beta2_relerr", "median"), fit_MAE=("fit_MAE", "mean"),
-               truth_MAE=("truth_MAE", "mean")).reset_index())
-display(fmt(rsum, 3))
-A.fig_recovery(recs, idx, rt, f"{FIG}/E4a_recovery.png")
-display(Image(f"{FIG}/E4a_recovery.png"))
+if rt.empty:
+    print("recovery runs not finished yet")
+else:
+  rsum = (rt.groupby(["truth", "arm"])
+              .agg(n=("seed", "size"), true_share=("true_share", "first"),
+                 est_share_mean=("est_share", "mean"), est_share_sd=("est_share", "std"),
+                 R_relerr=("R_relerr", "median"), beta1_relerr=("beta1_relerr", "median"),
+                 beta2_relerr=("beta2_relerr", "median"), fit_MAE=("fit_MAE", "mean"),
+                 truth_MAE=("truth_MAE", "mean")).reset_index())
+  display(fmt(rsum, 3))
+  A.fig_recovery(recs, idx, rt, f"{FIG}/E4a_recovery.png")
+  display(Image(f"{FIG}/E4a_recovery.png"))
 ''')
 md(TEXT["literature"])
 code('''
@@ -144,6 +171,8 @@ md(TEXT["cori_after"])
 md(TEXT["sensitivity"])
 code('''
 st = A.sensitivity_table(recs, idx)
+if st.empty or "variant" not in st:
+    st = pd.DataFrame(columns=["city", "arm", "variant", "MAE", "dMAE_%", "R_mean", "dRmean_%", "R_min", "R_max", "env_share"])
 cols = ["city", "arm", "variant", "MAE", "dMAE_%", "R_mean", "dRmean_%", "R_min", "R_max", "env_share"]
 for arm in ("det", "dpinn", "ff"):
     t = st[st.arm == arm]
@@ -179,7 +208,7 @@ code('''
 b = cvs[cvs.arm.isin(["det", "sir", "spline"])]
 piv = b.pivot_table(index="city", columns="arm", values="out_MAE")
 piv["sir/det"] = piv["sir"] / piv["det"]; piv["spline/det"] = piv["spline"] / piv["det"]
-display(piv.loc[panel.names].style.format("{:.3g}"))
+display(piv.reindex([c for c in panel.names if c in piv.index]).style.format("{:.3g}"))
 print("median over 21 governorates: SIR/det %.3f, spline/det %.3f; det best at %d, SIR best at %d, "
       "spline best at %d" % (piv["sir/det"].median(), piv["spline/det"].median(),
       (piv[["det", "sir", "spline"]].idxmin(axis=1) == "det").sum(),
@@ -211,8 +240,8 @@ md(TEXT["allcities_after"])
 # ---------------------------------------------------------------- 10. spatial
 md(TEXT["spatial"])
 code('''
-stab = A.spatial_table(S)
-display(fmt(stab, 4))
+if S:
+    display(fmt(A.spatial_table(S), 4))
 if "governorate_D50" in S:
     A.fig_spatial_R(S, f"{FIG}/E10_spatial_R.png")
     display(Image(f"{FIG}/E10_spatial_R.png"))

@@ -2,6 +2,8 @@
 design; the *_after cells interpret the results and are written from them."""
 
 TEXT = {}
+PENDING = ("*Interpretation of this section is added once every run it depends on is "
+           "complete (see the run-status table at the top).*")
 
 TEXT["title"] = r"""
 # Yemen cholera, second wave: the extended comparison
@@ -38,6 +40,14 @@ $\mathcal R(t)=\bar S(t)\,\kappa_{EI}J_1[\beta_1(t)+\alpha_0\beta_2(t)J_2]$, so 
 comparable with an effective reproduction number $R_t$.
 """
 
+TEXT["status"] = r"""
+### Run status
+
+Each block of fits, how many were planned and how many result files exist. Sections whose block is
+still pending show what has finished so far; their written interpretation is added once the block
+completes.
+"""
+
 TEXT["cities"] = r"""
 ## 0. The five focus governorates
 
@@ -55,7 +65,7 @@ governorate, with the training budget unchanged from the original notebook (800 
 search and is deterministic. `MAE_cv` is the seed-to-seed coefficient of variation of the in-sample
 error; `R_max_lo`–`R_max_hi` is the range over seeds of the largest $\mathcal R(t)$ in the window.
 """
-TEXT["seeds_after"] = "*(interpretation written from the results)*"
+TEXT["seeds_after"] = PENDING
 
 TEXT["holdout"] = r"""
 ## 2. Fuller holdout: rotated 4-fold interleave
@@ -67,7 +77,7 @@ it). Errors are pooled over the four folds. Each PINN arm was run with 10 seeds 
 spline, SIR and deterministic arms are deterministic. `vs_det` is held-out MAE relative to the
 deterministic arm; `degradation` is held-out over in-sample MAE.
 """
-TEXT["holdout_after"] = "*(interpretation written from the results)*"
+TEXT["holdout_after"] = PENDING
 
 TEXT["bands"] = r"""
 ## 3. Uncertainty bands on $\beta_1(t)$, $\beta_2(t)$ and $\mathcal R(t)$
@@ -87,7 +97,7 @@ Two kinds of band, labelled in every legend because they are not the same object
 The black curve in the $\mathcal R$ row is the model-free Cori estimate of §5. The table gives the
 median band width as the ratio upper/lower: 1 is a perfectly determined curve.
 """
-TEXT["bands_after"] = "*(interpretation written from the results)*"
+TEXT["bands_after"] = PENDING
 
 TEXT["recovery"] = r"""
 ## 4. Does the method recover known values?
@@ -108,7 +118,7 @@ three windows where published estimates exist, next to the model-free Cori estim
 record's own attack rates against those WHO EMRO reported for the second wave. The attack rates
 check the data rather than the method: if they did not match, no fitted quantity could.
 """
-TEXT["literature_after"] = "*(interpretation written from the results)*"
+TEXT["literature_after"] = PENDING
 
 TEXT["cori"] = r"""
 ## 5. An outside reference for $\mathcal R(t)$
@@ -124,7 +134,7 @@ The table scores each arm's $\mathcal R(t)$ (seed median for PINNs) against the 
 absolute difference, median log-ratio (0 = no bias), the fraction of days inside the Cori 95 %
 credible interval, and the rank correlation.
 """
-TEXT["cori_after"] = "*(interpretation written from the results)*"
+TEXT["cori_after"] = PENDING
 
 TEXT["sensitivity"] = r"""
 ## 6. Sensitivity to the fixed modelling choices
@@ -144,7 +154,7 @@ relative to the baseline fit for that city and arm.
 
 Diffusion is the remaining fixed choice; it only exists in the spatial model and is swept in §10.
 """
-TEXT["sensitivity_after"] = "*(interpretation written from the results)*"
+TEXT["sensitivity_after"] = PENDING
 
 TEXT["diagnostics"] = r"""
 ## 7. Residual diagnostics
@@ -154,7 +164,7 @@ Poisson model that fits), lag-1 autocorrelation and a Ljung–Box test over 10 l
 negative-binomial size $k$ implied by $\mathrm{Var}=\mu+\mu^2/k$, and randomized quantile residuals
 (Dunn & Smyth), which are standard normal under a correct model (`rqr_sd` ≈ 1, Shapiro p not small).
 """
-TEXT["diagnostics_after"] = "*(interpretation written from the results)*"
+TEXT["diagnostics_after"] = PENDING
 
 TEXT["baselines"] = r"""
 ## 8. Simple baselines
@@ -167,7 +177,7 @@ TEXT["baselines"] = r"""
 Both run through the same rotated 4-fold holdout as every other arm. Held-out MAE at all 21
 governorates:
 """
-TEXT["baselines_after"] = "*(interpretation written from the results)*"
+TEXT["baselines_after"] = PENDING
 
 TEXT["allcities"] = r"""
 ## 9. All 21 governorates
@@ -175,7 +185,7 @@ TEXT["allcities"] = r"""
 The deterministic SEIP arm (with its delta-method band) and the SIR baseline at every governorate,
 against the Cori reference. Panels are ordered by distance from Sana'a.
 """
-TEXT["allcities_after"] = "*(interpretation written from the results)*"
+TEXT["allcities_after"] = PENDING
 
 TEXT["spatial"] = r"""
 ## 10. Transmission that varies by location: $\beta(t,x)$
@@ -192,7 +202,7 @@ governorates (2,806 intervals) at once, $x\in[0, 799.4]$ km, $D_1=\dots=D_4$ hel
 AIC is deviance + 2 × parameters. The `shared` and `governorate` models are also refitted at
 $D=5$ and $D=250$ km²/day: diffusion is the one modelling choice §6 could not test.
 """
-TEXT["spatial_after"] = "*(interpretation written from the results)*"
+TEXT["spatial_after"] = PENDING
 
 TEXT["surfaces"] = r"""
 ## 11. Observed against fitted surfaces
@@ -204,6 +214,6 @@ was fitted to. The lower row is the signed residual relative to each governorate
 The 3-D view renders the same interval fields. The per-city fields stitch 21 independent fits
 together; the spatial fields come from one model of the whole country.
 """
-TEXT["surfaces_after"] = "*(interpretation written from the results)*"
+TEXT["surfaces_after"] = PENDING
 
-TEXT["conclusions"] = "## 12. What the extended analysis shows\n\n*(written from the results)*"
+TEXT["conclusions"] = "## 12. What the extended analysis shows\n\n" + PENDING
