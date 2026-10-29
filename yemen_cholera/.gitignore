@@ -1,0 +1,5 @@
+__pycache__/
+logs/
+*.tmp
+jobs_*.txt
+figures/
