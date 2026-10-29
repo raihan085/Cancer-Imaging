@@ -7,7 +7,21 @@ from narrative import TEXT
 
 C = []
 md = lambda s: C.append(nbf.v4.new_markdown_cell(s.strip("\n")))
-code = lambda s: C.append(nbf.v4.new_code_cell(s.strip("\n")))
+_first = [True]
+
+
+def code(s):
+    """Every analysis cell runs inside _safe(), so a section whose runs have
+    not finished prints 'not available yet' instead of stopping the notebook.
+    Variables the cell defines are published to the notebook namespace."""
+    s = s.strip("\n")
+    if _first[0]:
+        _first[0] = False
+        C.append(nbf.v4.new_code_cell(s))
+        return
+    body = "\n".join("    " + ln if ln.strip() else ln for ln in s.splitlines())
+    C.append(nbf.v4.new_code_cell(
+        "def _cell():\n" + body + "\n    globals().update(locals())\n_safe(_cell)"))
 
 md(TEXT["title"])
 code('''
@@ -21,15 +35,41 @@ pd.set_option("display.width", 220); pd.set_option("display.max_columns", 40)
 FIG = "figures"; os.makedirs(FIG, exist_ok=True)
 fmt = lambda df, d=3: df.style.format(precision=d, thousands=",").hide(axis="index")
 
-# RUN = True re-runs every fit (about a day of CPU on 4 cores). Otherwise the
-# result files shipped in results/ are loaded.
-RUN = False
-if RUN:
-    import subprocess
-    for lst in ("cheap", "pinn"):
-        subprocess.run(f"python make_jobs.py {lst} > jobs_{lst}.txt && ./run_queue.sh jobs_{lst}.txt 4",
-                       shell=True, check=True)
-    subprocess.run("./spatial_chain.sh", shell=True, check=True)
+
+def _safe(f):
+    try:
+        f()
+    except Exception as e:
+        print(f"[not available yet: {type(e).__name__}: {e}]")
+
+# ---------------------------------------------------------------- what to run
+# All False: load the result files shipped with this notebook (seconds).
+# Each switch re-runs one block from scratch; finished result files are skipped,
+# so an interrupted run can simply be started again.
+RUN_BASELINES = False   # deterministic, spline, SIR: 21 governorates x 5 fits,
+                        # plus sensitivity and recovery runs     (~2 h on 4 cores)
+RUN_PINN = False        # the PINN queue: 1,110 fits (focus cities x 4 arms x
+                        # N_SEEDS seeds x [full + 4 folds], recovery, sensitivity)
+                        #                                         (~15 h on 4 cores)
+RUN_SPATIAL = False     # 1-D diffusion and governorate-network fits (~2 h, 1 core)
+N_WORKERS = os.cpu_count() or 4
+
+import subprocess, make_jobs
+env = dict(os.environ, PATH=os.path.dirname(sys.executable) + os.pathsep + os.environ["PATH"])
+os.makedirs("logs", exist_ok=True)
+def run_block(name):
+    with open(f"jobs_{name}.txt", "w") as f:
+        f.write("\\n".join(getattr(make_jobs, name)()) + "\\n")
+    n = sum(1 for _ in open(f"jobs_{name}.txt"))
+    print(f"running {n} {name} jobs on {N_WORKERS} workers ...", flush=True)
+    subprocess.run(f"./run_queue.sh jobs_{name}.txt {N_WORKERS}", shell=True, check=True, env=env)
+if RUN_BASELINES:
+    run_block("cheap")
+if RUN_PINN:
+    run_block("pinn")
+if RUN_SPATIAL:
+    subprocess.run("./spatial_chain.sh", shell=True, check=True, env=env)
+print("PINN queue size:", len(make_jobs.pinn()), "fits")
 
 recs, idx = A.load("results")
 S = A.load_spatial("results/spatial")
