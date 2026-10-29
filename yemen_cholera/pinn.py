@@ -455,6 +455,8 @@ class CityData:
         m = panel.gov == gi
         self.t0 = torch.tensor(panel.t0[m]); self.t1 = torch.tensor(panel.t1[m])
         self.y = torch.tensor(panel.y[m]); self.c = torch.tensor(panel.dC[m])
+        self.k = (torch.tensor(np.asarray(panel.nb_k)[m])
+                  if getattr(panel, "nb_k", None) is not None else None)
         self.w = torch.tensor(panel.w[m])
         self.N = float(panel.pop[gi])
         self.name = panel.names[gi]
@@ -480,7 +482,11 @@ class CityData:
         c = self.c
         term = torch.where(c > 0, c * torch.log(torch.clamp(c, min=1e-300) / lam),
                            torch.zeros_like(c))
-        d2 = torch.clamp(2.0 * (term - (c - lam)), min=0.0)
+        if self.objective == "nb":
+            k = self.k
+            d2 = torch.clamp(2.0 * (term - (c + k) * torch.log((c + k) / (lam + k))), min=0.0)
+        else:
+            d2 = torch.clamp(2.0 * (term - (c - lam)), min=0.0)
         return torch.sign(c - lam) * torch.sqrt(d2) / self.dev_scale
 
 

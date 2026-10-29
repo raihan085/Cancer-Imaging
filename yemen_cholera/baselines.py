@@ -7,6 +7,9 @@ spline  Poisson P-spline regression of the per-capita incidence on time. No
         flexibility, not information. Smoothing chosen by AIC on the training
         rows only.
 
+Both take an optional negative-binomial size k; without it the likelihood is
+Poisson.
+
 sir     A plain SIR model with a time-varying transmission rate
             S' = -beta(t) S I,   I' = beta(t) S I - gamma I,   H = beta S I
         beta(t) = softplus(order-M Fourier series + trend), gamma = 1/7 d,
@@ -26,6 +29,11 @@ from scipy.optimize import least_squares, minimize
 import seip
 
 GAMMA_SIR = seip.GAMMA + seip.DELTA + seip.MU3
+
+
+def _dev(c, lam, k=None):
+    from fit import deviance_residual
+    return deviance_residual(c, lam, k)
 
 
 def _gl(n):
@@ -71,32 +79,42 @@ class SplineBaseline:
         r = np.exp(np.clip(B @ theta, -60, 5))            # (n, q)
         return Ndt * (r @ w), r
 
-    def _fit_pen(self, B, w, Ndt, c, pen, theta0):
+    def _fit_pen(self, B, w, Ndt, c, pen, theta0, k=None):
+        """Penalised Poisson (k None) or negative-binomial (size k) fit."""
         def f(th):
             lam, r = self._lam(th, B, w, Ndt)
             lam = np.maximum(lam, 1e-12)
-            val = np.sum(lam - c * np.log(lam)) + pen * th @ self.P @ th
+            if k is None:
+                val = np.sum(lam - c * np.log(lam))
+                dl = 1.0 - c / lam
+            else:
+                val = np.sum((c + k) * np.log(lam + k) - c * np.log(lam))
+                dl = (c + k) / (lam + k) - c / lam
+            val += pen * th @ self.P @ th
             G = Ndt[:, None] * np.einsum("nq,q,nqb->nb", r, w, B)
-            grad = G.T @ (1.0 - c / lam) + 2.0 * pen * self.P @ th
+            grad = G.T @ dl + 2.0 * pen * self.P @ th
             return val, grad
         res = minimize(f, theta0, jac=True, method="L-BFGS-B",
                        options=dict(maxiter=3000))
         th = res.x
         lam, r = self._lam(th, B, w, Ndt)
+        lam = np.maximum(lam, 1e-12)
         G = Ndt[:, None] * np.einsum("nq,q,nqb->nb", r, w, B)
-        F = G.T @ (G / np.maximum(lam, 1e-12)[:, None])
+        var = lam if k is None else lam + lam ** 2 / k
+        F = G.T @ (G / var[:, None])
         A = np.linalg.solve(F + 2.0 * pen * self.P + 1e-12 * np.eye(self.nb), F)
         edf = float(np.trace(A))
-        return th, edf, poisson_deviance(c, lam)
+        dev = float(np.sum(_dev(c, lam, k) ** 2))
+        return th, edf, dev
 
-    def fit(self, t0, t1, c, N, pens=(1e-3, 1e-2, 0.1, 1, 10, 100, 1e3, 1e4)):
+    def fit(self, t0, t1, c, N, pens=(1e-3, 1e-2, 0.1, 1, 10, 100, 1e3, 1e4), k=None):
         Ndt = N * (t1 - t0)
         B, w, _ = self._setup(t0, t1, Ndt)
         y0 = max(c.sum() / Ndt.sum(), 1e-9)
         th0 = np.full(self.nb, np.log(y0))
         best = None
         for pen in pens:
-            th, edf, dev = self._fit_pen(B, w, Ndt, c, pen, th0)
+            th, edf, dev = self._fit_pen(B, w, Ndt, c, pen, th0, k)
             aic = dev + 2.0 * edf
             if best is None or aic < best[0]:
                 best = (aic, pen, th, edf)
@@ -159,7 +177,7 @@ class SIRBaseline:
             out[r] = np.sum(wt * seg) / wt.sum()
         return out
 
-    def fit(self, t0, t1, c, N, y_first, cum_first, max_nfev=300):
+    def fit(self, t0, t1, c, N, y_first, cum_first, max_nfev=300, k=None):
         I0 = max(y_first / GAMMA_SIR, 1e-9)
         S0 = max(1.0 - I0 - cum_first, 1e-6)
         self.S0, self.I0 = S0, I0
@@ -169,9 +187,7 @@ class SIRBaseline:
         def resid(th):
             _, _, H, _ = self.solve(th, S0, I0)
             lam = np.maximum(self._avg(H, t0, t1) * Ndt, 1e-10)
-            term = np.where(c > 0, c * np.log(np.maximum(c, 1e-300) / lam), 0.0)
-            d2 = np.maximum(2 * (term - (c - lam)), 0.0)
-            return np.sign(c - lam) * np.sqrt(d2) / sc
+            return _dev(c, lam, k) / sc
 
         # seed: best constant beta on a coarse grid
         best = None
@@ -189,3 +205,17 @@ class SIRBaseline:
 
     def predict(self, t0, t1):
         return self._avg(self.H, t0, t1)
+
+
+def nb_k_by_governorate(panel):
+    """(n_obs,) negative-binomial size: one k per governorate, by method of
+    moments around that governorate's penalised-spline Poisson fit."""
+    from fit import nb_size
+    k = np.empty(panel.n_obs)
+    for g in range(panel.ng):
+        m = panel.gov == g
+        N = float(panel.pop[g])
+        sp = SplineBaseline().fit(panel.t0[m], panel.t1[m], panel.dC[m], N)
+        mu = sp.predict(panel.t0[m], panel.t1[m]) * N * (panel.t1[m] - panel.t0[m])
+        k[m] = nb_size(panel.dC[m], mu)
+    return k

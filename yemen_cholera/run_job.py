@@ -32,7 +32,7 @@ D0 = seip.Diffusion(0, 0, 0, 0)
 # Each entry overrides the defaults below. Problem-level keys go to the IC /
 # observation model; the rest to the fit.
 DEFAULTS = dict(truncation_correction=False, age_profile="flat",
-                observable=seip.OBS_FORCE_OF_INFECTION, objective="poisson",
+                observable=seip.OBS_FORCE_OF_INFECTION, objective="nb",
                 winsorize=True, M=4, w_ren=20.0, w_pde=1.0)
 VARIANTS = {
     "base": {},
@@ -42,6 +42,7 @@ VARIANTS = {
     "onset": dict(observable=seip.OBS_INFECTIOUS_ONSET),
     "nowinsor": dict(winsorize=False),
     "wls": dict(objective="wls"),
+    "poisson": dict(objective="poisson"),          # the original likelihood
     "M2": dict(M=2),
     "M6": dict(M=6),
     "wren5": dict(w_ren=5.0),
@@ -72,9 +73,20 @@ def truth_betas(t, share, S_ref=1.0):
     return tot * (1.0 - share), tot * share / (seip.ALPHA0 * J2)
 
 
-def synthesize(panel, share, rng, ic_opts, dt=0.25):
-    """Poisson counts from the single-location model under a known beta pair,
-    on this panel's own intervals and population."""
+def estimate_nb_k(panel):
+    """Negative-binomial size for one governorate, from the rows it is given:
+    method of moments around a penalised-spline Poisson fit, which tracks the
+    epidemic curve without any SEIP structure, so k measures noise about the
+    trend and not misfit of a particular arm."""
+    sp = baselines.SplineBaseline().fit(panel.t0, panel.t1, panel.dC, float(panel.pop[0]))
+    mu = sp.predict(panel.t0, panel.t1) * float(panel.pop[0]) * (panel.t1 - panel.t0)
+    return fit.nb_size(panel.dC, mu)
+
+
+def synthesize(panel, share, rng, ic_opts, dt=0.25, k=None):
+    """Counts from the single-location model under a known beta pair, on this
+    panel's own intervals and population: negative binomial with the city's own
+    size k (Poisson if k is None), so the synthetic noise matches the record."""
     g1 = seip.Grid(dt=dt, nx=1)
     ic = seip.build_initial_condition(g1, np.array([0.0]), panel.y_first,
                                       panel.cum_first, **ic_opts)
@@ -83,7 +95,9 @@ def synthesize(panel, share, rng, ic_opts, dt=0.25):
     A = data_io.build_interval_operator(g1, panel)
     mean_rate = A @ H[:, 0]
     N = float(panel.pop[0]); Ndt = N * (panel.t1 - panel.t0)
-    c = rng.poisson(np.maximum(mean_rate * Ndt, 0)).astype(float)
+    lam = np.maximum(mean_rate * Ndt, 1e-12)
+    c = (rng.poisson(lam) if k is None else
+         rng.negative_binomial(k, k / (k + lam))).astype(float)
     p = copy.copy(panel)
     p.dC = c; p.dC_raw = c.copy(); p.y = c / Ndt; p.y_raw = p.y.copy()
     p.w_count = 1.0 / np.sqrt(np.maximum(c, 1.0)); p.w_count /= p.w_count.mean()
@@ -140,7 +154,9 @@ def main():
     truth = None
     if a.truth:
         rng = np.random.default_rng(1000 + a.seed)
-        full, truth = synthesize(full, TRUTHS[a.truth], rng, ic_opts, a.dt)
+        k_real = estimate_nb_k(full) if cfg["objective"] == "nb" else None
+        full, truth = synthesize(full, TRUTHS[a.truth], rng, ic_opts, a.dt, k=k_real)
+        truth["k"] = k_real
 
     n = len(full.y)
     TE = np.zeros(n, bool)
@@ -151,11 +167,16 @@ def main():
     train = row_slice(full, TR)
     train.set_weights("count")
     N = float(full.pop[0])
+    k_nb = None
+    if cfg["objective"] == "nb":
+        k_nb = estimate_nb_k(train)                 # training rows only
+        full.nb_k = np.full(len(full.y), k_nb)
+        train.nb_k = np.full(len(train.y), k_nb)
     kap, J1, J2 = seip.ngm_integrals()
     out = dict(city=a.city, arm=a.arm, seed=a.seed, fold=a.fold,
                variant=a.variant, truth_name=a.truth, cfg=cfg,
                t0=full.t0, t1=full.t1, y=full.y, c=full.dC, N=N, TR=TR, TE=TE,
-               t_day=g1.t[::int(round(1 / a.dt))])
+               t_day=g1.t[::int(round(1 / a.dt))], nb_k=k_nb)
 
     if a.arm == "det":
         np.random.seed(a.seed)
@@ -229,14 +250,14 @@ def main():
                    loss_final=float(hist[-1]) if hist else np.nan,
                    n_params=int(sum(p.numel() for p in model.parameters())))
     elif a.arm == "spline":
-        sp = baselines.SplineBaseline().fit(train.t0, train.t1, train.dC, N)
+        sp = baselines.SplineBaseline().fit(train.t0, train.t1, train.dC, N, k=k_nb)
         yhat = sp.predict(full.t0, full.t1)
         b10 = b20 = R = S = None
         out.update(rate_day=sp.rate(out["t_day"]).astype(np.float32),
                    edf=sp.edf, pen=sp.pen, n_params=sp.edf)
     else:   # sir
         sb = baselines.SIRBaseline(M=cfg["M"], dt=a.dt).fit(
-            train.t0, train.t1, train.dC, N, full.y_first[0], full.cum_first[0])
+            train.t0, train.t1, train.dC, N, full.y_first[0], full.cum_first[0], k=k_nb)
         yhat = sb.predict(full.t0, full.t1)
         b10, b20, R, S = sb.b, None, sb.R, sb.S
         out.update(n_params=len(sb.theta))

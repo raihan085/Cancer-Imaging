@@ -40,20 +40,24 @@ print(f"{len(recs)} result files; spatial fits: {sorted(S)}")
 md(TEXT["status"])
 code('''
 P = idx.arm.isin(A.PINN); B = idx.variant == "base"; T = idx.truth == ""
+nF, nS, nA = len(FOCUS), A.N_SEEDS, A.N_SEEDS_AUX
 expected = [
-    ("deterministic, spline, SIR: 21 governorates x (full + 4 folds)", 315,
+    ("deterministic, spline, SIR: 21 governorates x (full + 4 folds)", 3 * 21 * 5,
      (~P & B & T & (idx.seed == 0)).sum()),
-    ("PINN, full record: 5 cities x 4 arms x 10 seeds", 200, (P & B & T & (idx.fold < 0)).sum()),
-    ("PINN holdout, DPINN and FF-PINN: 5 x 2 x 10 seeds x 4 folds", 400,
+    (f"PINN, full record: {nF} cities x 4 arms x {nS} seeds", nF * 4 * nS,
+     (P & B & T & (idx.fold < 0)).sum()),
+    (f"PINN holdout, DPINN and FF-PINN: {nF} x 2 x {nS} seeds x 4 folds", nF * 2 * nS * 4,
      (idx.arm.isin(["dpinn", "ff"]) & B & T & (idx.fold >= 0)).sum()),
-    ("PINN holdout, DPINN-FS and F-DPINN: 5 x 2 x 10 x 4", 400,
+    (f"PINN holdout, DPINN-FS and F-DPINN: {nF} x 2 x {nS} x 4", nF * 2 * nS * 4,
      (idx.arm.isin(["dpinn_fs", "fdpinn"]) & B & T & (idx.fold >= 0)).sum()),
-    ("recovery, deterministic: 5 x 2 truths x 3", 30, (~P & (idx.truth != "") & idx.city.isin(FOCUS)).sum()),
-    ("recovery, DPINN and FF-PINN: 5 x 2 x 2 truths x 3", 60, (P & (idx.truth != "")).sum()),
-    ("sensitivity, deterministic: 5 x 8 variants", 40,
+    (f"recovery, deterministic: {nF} x 2 truths x {nA}", nF * 2 * nA,
+     (~P & (idx.truth != "") & idx.city.isin(FOCUS)).sum()),
+    (f"recovery, DPINN and FF-PINN: {nF} x 2 x 2 truths x {nA}", nF * 4 * nA,
+     (P & (idx.truth != "")).sum()),
+    (f"sensitivity, deterministic: {nF} x 9 variants", nF * 9,
      ((idx.arm == "det") & ~B & idx.city.isin(FOCUS)).sum()),
-    ("sensitivity, DPINN and FF-PINN: 5 x 2 x 4 variants", 40, (P & ~B).sum()),
-    ("spatial fits (shared / smooth / governorate, D sweep)", 7, len(S)),
+    (f"sensitivity, DPINN and FF-PINN: {nF} x 2 x 5 variants", nF * 10, (P & ~B).sum()),
+    ("spatial and network fits", 7, len(S)),
 ]
 st_ = pd.DataFrame(expected, columns=["block", "planned", "done"])
 st_["complete"] = (st_.done >= st_.planned).map({True: "yes", False: "pending"})
@@ -242,14 +246,19 @@ md(TEXT["spatial"])
 code('''
 if S:
     display(fmt(A.spatial_table(S), 4))
-if "governorate_D50" in S:
+if "network" in S:
     A.fig_spatial_R(S, f"{FIG}/E10_spatial_R.png")
     display(Image(f"{FIG}/E10_spatial_R.png"))
-    d = S["governorate_D50"]
-    k = pd.DataFrame(dict(governorate=d["names"], x_km=d["xg"],
-                          offset=d["theta"][-len(d["names"]):],
-                          R_mean=d["R_g"].mean(0), R_max=d["R_g"].max(0))).sort_values("x_km")
-    display(fmt(k, 3))
+rows = []
+for g, nm in enumerate(panel.names):
+    m = panel.gov == g
+    r = dict(governorate=nm, x_km=panel.xg[g], obs_mean=panel.y[m].mean())
+    for key in ("shared_D50", "governorate_D50", "isolated", "network"):
+        if key in S:
+            r[key] = S[key]["yhat"][m].mean() / max(panel.y[m].mean(), 1e-12)
+    rows.append(r)
+print("fitted mean / observed mean, by governorate (1 = unbiased)")
+display(fmt(pd.DataFrame(rows).sort_values("x_km"), 2))
 ''')
 md(TEXT["spatial_after"])
 
@@ -258,8 +267,9 @@ md(TEXT["surfaces"])
 code('''
 fields = {"Deterministic, per city": A.city_fields(recs, idx, panel, "det", panel.names)[1],
           "Spline baseline, per city": A.city_fields(recs, idx, panel, "spline", panel.names)[1]}
-for key, nm in (("shared_D50", "Spatial, shared beta(t)"),
-                ("governorate_D50", "Spatial, beta(t, x)")):
+for key, nm in (("shared_D50", "1-D diffusion, shared beta(t)"),
+                ("governorate_D50", "1-D diffusion, beta(t) x k_g"),
+                ("network", "Network, beta(t) x k_g")):
     if key in S:
         fields[nm] = A.spatial_field(S[key], panel)
 A.fig_surfaces(panel, fields, f"{FIG}/E11a_surfaces_all.png",
@@ -275,8 +285,8 @@ code('''
 ff = {"Deterministic": fields["Deterministic, per city"]}
 for a in ("dpinn", "ff", "dpinn_fs", "fdpinn"):
     ff[A.ARM[a][0] + " (seed median)"] = A.city_fields(recs, idx, panel, a, panel.names)[1]
-if "Spatial, beta(t, x)" in fields:
-    ff["Spatial, beta(t, x)"] = fields["Spatial, beta(t, x)"]
+if "Network, beta(t) x k_g" in fields:
+    ff["Network, beta(t) x k_g"] = fields["Network, beta(t) x k_g"]
 foc_idx = [panel.names.index(c) for c in FOCUS]
 mask = np.isin(np.arange(panel.ng), foc_idx)
 sub = {k: np.where(mask[None, :], v, np.nan) for k, v in ff.items()}

@@ -8,10 +8,28 @@ PENDING = ("*Interpretation of this section is added once every run it depends o
 TEXT["title"] = r"""
 # Yemen cholera, second wave: the extended comparison
 
-This notebook follows on from `yemen_cholera_dpinn_vs_ffpinn_fixed.ipynb`. It reruns the comparison
-on the **corrected loader**: the original dropped each governorate's first reporting interval and
-anchored the initial condition on the second one, about 7× too high at Al Hudaydah. It then adds
-eleven analyses the first study did not have:
+This notebook follows on from `yemen_cholera_dpinn_vs_ffpinn_fixed.ipynb` and changes three things
+in every arm before adding eleven new analyses.
+
+**What changed relative to the original study**
+
+1. **Corrected loader.** The original dropped each governorate's first reporting interval (21
+   intervals, 16,598 cases) and anchored the initial condition on the second one.
+2. **Negative-binomial likelihood.** A pilot run under the original Poisson deviance showed the
+   residual variance to be about 80× Poisson (median over 21 governorates; implied negative-binomial
+   size $k\approx 11$). A Poisson deviance reads that reporting noise as signal: it over-weights
+   batch-release spikes and makes every interval too narrow. Every arm (deterministic, PINN, spline,
+   SIR, spatial) now uses the NB deviance with a governorate-specific size $k$, estimated by method of
+   moments around a penalised-spline fit **on the training rows of each fit only**. The Poisson
+   objective is kept as the `poisson` sensitivity variant (§6).
+3. **Smoothed initial-condition anchor.** The initial stock was set from the first positive
+   interval, which in a sparse series is often a batch release (Al Maharah's was 3.5× its own mean).
+   It is now the case-weighted rate over the 14 days from that interval.
+
+And one new spatial architecture (§10): a **governorate network** model replacing diffusion along a
+single distance-from-Sana'a axis, which places Shabwah 2 km from Aden and Dhamar 4 km from Amran.
+
+**The eleven analyses**
 
 | § | analysis | what it answers |
 |---|---|---|
@@ -88,7 +106,7 @@ Two kinds of band, labelled in every legend because they are not the same object
   uncertainty**: how differently the same architecture answers on the same data. It is not a
   sampling interval.
 * **Deterministic arm**: a 95 % **delta-method** band. The Gauss–Newton covariance at the optimum
-  is inflated by the fitted dispersion (quasi-Poisson, §7 shows why that inflation is needed) and
+  of the NB deviance, scaled by the residual dispersion, is
   propagated *linearly* to $\log\beta_1$, $\log\beta_2$ and $\log\mathcal R$. Linear propagation is
   essential here: the covariance is near-singular along the direction that trades $\beta_1$ against
   $\beta_2$, and pushing random draws along it through the softplus link produces spurious
@@ -110,7 +128,9 @@ from culture-confirmed cases is 2.2 [2.1, 2.3]), between 1 and 2 through the sum
 by October 2017. The route split is unknown in the literature, so two opposite truths are used:
 20 % and 70 % environmental. Counts are Poisson draws on each focus governorate's **real** bulletin
 calendar and population, generated from the same single-location model that is fitted, so the
-truth is exactly attainable and any miss is the method's. Three replicate datasets per truth.
+truth is exactly attainable and any miss is the method's. Counts are drawn negative-binomial with
+each governorate's own estimated $k$, so the synthetic noise is as heavy as the record's. Three
+replicate datasets per truth.
 """
 TEXT["literature"] = r"""
 **4b. Against published estimates.** The fitted $\mathcal R(t)$ on the real record, averaged over
@@ -148,7 +168,8 @@ relative to the baseline fit for that city and arm.
 | `age_eq`, `age_ln` | exponential (equilibrium) or log-normal initial age profile instead of flat |
 | `onset` | observe infectious onsets $\int\sigma E\,da$ instead of the force of infection |
 | `nowinsor` | no winsorisation of the 0.5 % largest rates |
-| `wls` | weighted least squares instead of Poisson deviance |
+| `poisson` | the original Poisson deviance instead of negative binomial |
+| `wls` | weighted least squares instead of a deviance |
 | `M2`, `M6` | Fourier order of $\beta$: 2 or 6 instead of 4 |
 | `wren5`, `wren80` | PINN renewal-coupling weight 5 or 80 instead of 20 (PINN arms only, seed 0) |
 
@@ -159,10 +180,11 @@ TEXT["sensitivity_after"] = PENDING
 TEXT["diagnostics"] = r"""
 ## 7. Residual diagnostics
 
-For each full-record fit (seed 0): the Pearson dispersion $\hat\phi=\sum r_i^2/(n-p)$ (1 for a
-Poisson model that fits), lag-1 autocorrelation and a Ljung–Box test over 10 lags, the
-negative-binomial size $k$ implied by $\mathrm{Var}=\mu+\mu^2/k$, and randomized quantile residuals
-(Dunn & Smyth), which are standard normal under a correct model (`rqr_sd` ≈ 1, Shapiro p not small).
+For each full-record fit (seed 0), Pearson residuals under the **negative-binomial** variance the
+fit used ($\mu+\mu^2/k$): the dispersion $\hat\phi=\sum r_i^2/(n-p)$ (1 when the variance model is
+right), the same quantity under a Poisson variance for comparison (`dispersion_vs_poisson`, the
+pilot's ~80), lag-1 autocorrelation and a Ljung–Box test over 10 lags, and randomized quantile
+residuals (Dunn & Smyth), standard normal under a correct model (`rqr_sd` ≈ 1, Shapiro p not small).
 """
 TEXT["diagnostics_after"] = PENDING
 
@@ -188,19 +210,31 @@ against the Cori reference. Panels are ordered by distance from Sana'a.
 TEXT["allcities_after"] = PENDING
 
 TEXT["spatial"] = r"""
-## 10. Transmission that varies by location: $\beta(t,x)$
+## 10. Transmission that varies by location, and a network instead of an axis
 
-The full $(t,x)$ transport–diffusion model fitted by the deterministic solver to all 21
-governorates (2,806 intervals) at once, $x\in[0, 799.4]$ km, $D_1=\dots=D_4$ held fixed:
+All 21 governorates (2,806 intervals) fitted at once by the deterministic solver, NB deviance.
 
-* **shared**: one $\beta_j(t)$ for the whole country (20 parameters), as in the original §13;
-* **smooth**: $\beta_j(t,x)$ with a cubic Legendre surface in $x$ per route plus a
-  time×distance interaction (32 parameters);
-* **governorate**: $\beta_j(t)\cdot k_g$, one multiplicative offset per governorate common to both
-  routes, ridge-shrunk toward 1 and interpolated linearly in $x$ (41 parameters).
+**Original geometry: diffusion along distance from Sana'a**, $x\in[0, 799.4]$ km,
+$D_1=\dots=D_4=50$ km²/day:
 
-AIC is deviance + 2 × parameters. The `shared` and `governorate` models are also refitted at
-$D=5$ and $D=250$ km²/day: diffusion is the one modelling choice §6 could not test.
+* `shared_D50`: one $\beta_j(t)$ for the whole country (20 parameters), as in the original §13;
+* `governorate_D50`: $\beta_j(t)\cdot k_g$, one offset per governorate common to both routes,
+  ridge-shrunk toward 1 (41 parameters); refitted at $D=5$ and $D=250$ because diffusion is the
+  one fixed choice §6 cannot test.
+
+**New geometry: a governorate network** (`network_fit.py`). Each governorate is its own node running
+the age-structured SEIP system with no diffusion. Susceptibles at $g$ feel the pressure
+$\sum_h M_{gh}\,(\text{pressure generated at }h)$ with $M=(1-m)I+mW$,
+$W_{gh}\propto N_h/d_{gh}^2$ over great-circle distances between governorate centroids (the IASC
+COD boundaries already in the data), and the mixing fraction $m$ estimated:
+
+* `network`: $\beta_j(t)\cdot k_g$ plus estimated $m$ (42 parameters);
+* `isolated`: the same with $m=0$, so `network` − `isolated` is the value of the coupling;
+* `network_shared`: estimated $m$ but one national $\beta_j(t)$, so `network` − `network_shared` is
+  the value of letting transmission differ by governorate.
+
+AIC is deviance + 2 × parameters. In the network models $\mathcal R_g(t)$ uses the local
+$\beta_g$ and $S_g$; with small $m$ it is the within-governorate reproduction number.
 """
 TEXT["spatial_after"] = PENDING
 
@@ -212,7 +246,7 @@ distance from Sana'a; each bulletin interval is drawn across its own span, **not
 interpolated between bulletins**, and the model is drawn as its interval average, the quantity it
 was fitted to. The lower row is the signed residual relative to each governorate's mean incidence.
 The 3-D view renders the same interval fields. The per-city fields stitch 21 independent fits
-together; the spatial fields come from one model of the whole country.
+together; the 1-D diffusion and network fields each come from one model of the whole country.
 """
 TEXT["surfaces_after"] = PENDING
 

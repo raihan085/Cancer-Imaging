@@ -351,7 +351,7 @@ OBS_INFECTIOUS_ONSET = "onset"      # H = int sigma(a) E da, the declared altern
 def solve_forward(grid: Grid, ic: InitialCondition, beta10_t, beta20_t,
                   diff: Diffusion, want_states: bool = False,
                   scheme: str = "strang", observable: str = OBS_FORCE_OF_INFECTION,
-                  n_sweeps: int = 2, record_full: bool = False):
+                  n_sweeps: int = 2, record_full: bool = False, mix=None):
     """March over [0, T_MAX].
 
     scheme
@@ -398,6 +398,17 @@ def solve_forward(grid: Grid, ic: InitialCondition, beta10_t, beta20_t,
         if fac[3] is not None: P = diffuse_exact(P, fac[3])
         return S, E, I, P
 
+    # Infection pressure felt at each location. With `mix` (an nx-by-nx
+    # row-stochastic matrix) susceptibles at location g are exposed to the
+    # mix-weighted pressure of every location -- the metapopulation coupling
+    # used by network_fit.py in place of diffusion along one axis.
+    if mix is None:
+        pI = lambda I_: grid.wf @ I_
+        pP = lambda P_: grid.wh @ P_
+    else:
+        pI = lambda I_: mix @ (grid.wf @ I_)
+        pP = lambda P_: mix @ (grid.wh @ P_)
+
     H = np.empty((grid.nt + 1, grid.nx))
     Sbar = np.empty(grid.nt + 1)
     want_states = want_states or record_full
@@ -412,8 +423,8 @@ def solve_forward(grid: Grid, ic: InitialCondition, beta10_t, beta20_t,
         rec["P_full"] = np.empty((grid.nt + 1, grid.nb + 1, grid.nx))
 
     for k in range(grid.nt + 1):
-        lamI = beta10_t[k] * (grid.wf @ I)
-        lamP = beta20_t[k] * (grid.wh @ P)
+        lamI = beta10_t[k] * pI(I)
+        lamP = beta20_t[k] * pP(P)
         foi0 = lamI + lamP
         H[k] = S * foi0 if observable == OBS_FORCE_OF_INFECTION else (grid.wsig @ E)
         Sbar[k] = S.mean()
@@ -431,8 +442,8 @@ def solve_forward(grid: Grid, ic: InitialCondition, beta10_t, beta20_t,
 
         if scheme == "strang":
             S, E, I, P = diffuse(S, E, I, P)
-            foi0 = (beta10_t[k] * (grid.wf @ I)
-                    + beta20_t[k] * (grid.wh @ P))          # after the half-flow
+            foi0 = (beta10_t[k] * pI(I)
+                    + beta20_t[k] * pP(P))                  # after the half-flow
 
         inE0 = S * foi0
         inI0 = grid.wsig @ E
@@ -450,7 +461,7 @@ def solve_forward(grid: Grid, ic: InitialCondition, beta10_t, beta20_t,
             b10h, b20h = beta10_t[k + 1], beta20_t[k + 1]
             Snew = S
             for _ in range(max(1, n_sweeps)):
-                foi1 = b10h * (grid.wf @ In) + b20h * (grid.wh @ Pn)
+                foi1 = b10h * pI(In) + b20h * pP(Pn)
                 # S by the trapezoid rule, solved semi-implicitly so the sink uses
                 # the new-time S rather than the old one
                 Snew = ((S * (1.0 - 0.5 * dt * (foi0 + MU1)) + dt * LAMBDA_REC)

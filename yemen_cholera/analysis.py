@@ -37,9 +37,23 @@ plt.rcParams.update({
     "figure.facecolor": "white", "savefig.bbox": "tight",
 })
 
-FOCUS = ["Al Hudaydah", "Hajjah", "Dhamar", "Al Bayda", "Hadramaut"]
-FOCUS_NOTE = {"Al Hudaydah": "1st by cases", "Hajjah": "2nd", "Dhamar": "3rd",
-              "Al Bayda": "median (11th)", "Hadramaut": "last (21st)"}
+from make_jobs import FOCUS, N_SEEDS, N_SEEDS_AUX      # the study design, defined once
+
+
+def focus_notes():
+    """Label each focus governorate by its rank in total reported cases."""
+    try:
+        c = pd.read_csv("data_real/cases_long.csv")
+        rank = c.groupby("governorate").new_cases.sum().rank(ascending=False).astype(int)
+        n = len(rank)
+        lab = lambda r: ("median" if r == (n + 1) // 2 else "last" if r == n else "") 
+        return {g: f"rank {rank[g]}" + (f", {lab(rank[g])}" if lab(rank[g]) else "")
+                for g in FOCUS}
+    except Exception:
+        return {g: "" for g in FOCUS}
+
+
+FOCUS_NOTE = focus_notes()
 PINN = ["dpinn", "dpinn_fs", "fdpinn", "ff"]
 ARM = {  # key: (label, colour, linestyle)
     "det": ("Deterministic", "#555555", "-"),
@@ -503,10 +517,14 @@ def residual_diagnostics(d, max_lag=10):
     y, yh, c = np.asarray(d["y"]), np.asarray(d["yhat"]), np.asarray(d["c"])
     Ndt = d["N"] * (d["t1"] - d["t0"])
     lam = np.maximum(yh * Ndt, 1e-9)
-    pr = (c - lam) / np.sqrt(lam)
+    k = d.get("nb_k")
+    var = lam if not k else lam + lam ** 2 / k
+    pr_pois = (c - lam) / np.sqrt(lam)
+    pr = (c - lam) / np.sqrt(var)
     n = len(pr); p = float(d.get("n_params") or 0)
     p_eff = p if 0 < p < n / 2 else 0.0
     phi = float(np.sum(pr ** 2) / max(n - p_eff, 1))
+    phi_pois = float(np.sum(pr_pois ** 2) / max(n - p_eff, 1))
     r = pr - pr.mean()
     acf = np.array([np.sum(r[k:] * r[:-k]) / np.sum(r ** 2) for k in range(1, max_lag + 1)])
     Q = n * (n + 2) * np.sum(acf ** 2 / (n - np.arange(1, max_lag + 1)))
@@ -516,10 +534,15 @@ def residual_diagnostics(d, max_lag=10):
     k_nb = float(np.sum(lam ** 2) / excess) if excess > 0 else np.inf
     # randomized quantile residuals (Dunn & Smyth) for a Poisson mean lam
     rng = np.random.default_rng(0)
-    a = stats.poisson.cdf(c - 1, lam); b = stats.poisson.cdf(c, lam)
+    if not k:
+        a = stats.poisson.cdf(c - 1, lam); b = stats.poisson.cdf(c, lam)
+    else:
+        pp = k / (k + lam)
+        a = stats.nbinom.cdf(c - 1, k, pp); b = stats.nbinom.cdf(c, k, pp)
     u = np.clip(a + rng.uniform(size=n) * (b - a), 1e-12, 1 - 1e-12)
     rq = stats.norm.ppf(u)
-    return dict(dispersion=phi, acf1=float(acf[0]), ljung_box_p=p_lb, nb_size=k_nb,
+    return dict(dispersion=phi, dispersion_vs_poisson=phi_pois, nb_k_used=k or np.inf,
+                acf1=float(acf[0]), ljung_box_p=p_lb, nb_size=k_nb,
                 rqr_sd=float(np.std(rq)), shapiro_p=float(stats.shapiro(rq).pvalue),
                 pearson=pr, acf=acf, rqr=rq, n=n)
 
@@ -530,8 +553,9 @@ def diagnostics_table(recs, idx, cities=FOCUS):
         dg = residual_diagnostics(d)
         keep[(d["city"], d["arm"])] = dg
         rows.append(dict(city=d["city"], arm=d["arm"],
-                         **{k: dg[k] for k in ("dispersion", "acf1", "ljung_box_p",
-                                               "nb_size", "rqr_sd", "shapiro_p")}))
+                         **{k: dg[k] for k in ("nb_k_used", "dispersion", "dispersion_vs_poisson",
+                                               "acf1", "ljung_box_p", "nb_size", "rqr_sd",
+                                               "shapiro_p")}))
     return pd.DataFrame(rows), keep
 
 
@@ -559,9 +583,10 @@ def fig_diagnostics(keep, path, cities=FOCUS, arms=("det", "spline", "dpinn", "f
     axes[0, 0].set_ylabel("Pearson residual"); axes[1, 0].set_ylabel("ACF")
     axes[2, 0].set_ylabel("randomized quantile residual")
     axes[0, 0].legend(fontsize=7)
-    fig.suptitle("Residual diagnostics, full-record fits (seed 0). A Poisson model that "
-                 "fits has Pearson residuals of order 1, no autocorrelation and RQRs on the "
-                 "diagonal.", y=1.01, fontsize=10)
+    fig.suptitle("Residual diagnostics, full-record fits (seed 0), under the negative-binomial "
+                 "variance each fit used. A model that fits has Pearson residuals of order 1, no "
+                 "autocorrelation and randomized quantile residuals on the diagonal.",
+                 y=1.01, fontsize=10)
     fig.tight_layout(); fig.savefig(path); plt.close(fig)
 
 
@@ -607,7 +632,8 @@ def spatial_table(S):
     rows = []
     for k, d in S.items():
         e = errs(d["yhat"], d["y"])
-        rows.append(dict(fit=k, model=d["model"], D=d["D"], n_params=d["nparam"],
+        rows.append(dict(fit=k, model=d["model"], D=d["D"], mixing=d.get("mixing", np.nan),
+                         n_params=d["nparam"],
                          deviance=d["deviance"], AIC=d["deviance"] + 2 * d["nparam"],
                          **e, converged=d["converged"], nfev=d["nfev"],
                          R_mean=float(np.mean(d["R_g"])), R_max=float(np.max(d["R_g"])),
@@ -616,7 +642,7 @@ def spatial_table(S):
     return t
 
 
-def fig_spatial_R(S, path, key="governorate_D50", ref="shared_D50", names=None):
+def fig_spatial_R(S, path, key="network", ref="shared_D50", names=None):
     d, r = S[key], S.get(ref)
     names = names or d["names"]
     fig, axes = plt.subplots(1, 2, figsize=(13, 4.4))
@@ -629,21 +655,24 @@ def fig_spatial_R(S, path, key="governorate_D50", ref="shared_D50", names=None):
     if r is not None:
         ax.plot(r["t_day"], np.median(r["R_g"], axis=1), "k--", lw=1.6, label="shared beta(t)")
     ax.axhline(1, color="k", lw=0.6, ls=":"); ax.set_yscale("log")
-    ax.set_title("(a) R(t) at each governorate, beta(t, x) model (colour = distance)",
+    ax.set_title(f"(a) R(t) at each governorate, {key} model (colour = distance)",
                  loc="left")
     ax.set_xlabel("t (days)"); ax.legend(fontsize=6.5, ncol=2)
     ax = axes[1]
-    for nm, dd, col in (("shared", r, "k"), (key, d, "#D55E00")):
+    for nm, dd, col in (("shared beta(t), 1-D diffusion", r, "k"),
+                        ("governorate_D50", S.get("governorate_D50"), "#0072B2"),
+                        (key, d, "#D55E00")):
         if dd is None:
             continue
-        mae = [np.mean(np.abs(dd["yhat"][dd["gov"] == g] - dd["y"][dd["gov"] == g]))
-               / max(np.mean(dd["y"][dd["gov"] == g]), 1e-12) for g in range(len(dd["names"]))]
-        ax.plot(dd["xg"], mae, "o", color=col, ms=5, label=nm, alpha=0.8)
+        bias = [np.mean(dd["yhat"][dd["gov"] == g]) / max(np.mean(dd["y"][dd["gov"] == g]), 1e-12)
+                for g in range(len(dd["names"]))]
+        ax.plot(dd["xg"], bias, "o", color=col, ms=5, label=nm, alpha=0.8)
+    ax.axhline(1, color="k", lw=0.7, ls=":"); ax.set_yscale("log")
     for g in range(len(d["names"])):
-        ax.annotate(d["names"][g], (d["xg"][g], 0), fontsize=5.5, rotation=90,
+        ax.annotate(d["names"][g], (d["xg"][g], 1), fontsize=5.5, rotation=90,
                     xytext=(0, 3), textcoords="offset points", color="#666")
-    ax.set_xlabel("x (km from Sana'a)"); ax.set_ylabel("MAE / mean incidence")
-    ax.set_title("(b) relative error by governorate", loc="left"); ax.legend(fontsize=7)
+    ax.set_xlabel("x (km from Sana'a)"); ax.set_ylabel("fitted mean / observed mean")
+    ax.set_title("(b) level bias by governorate (1 = unbiased)", loc="left"); ax.legend(fontsize=7)
     fig.tight_layout(); fig.savefig(path); plt.close(fig)
 
 

@@ -4,3 +4,4 @@ logs/
 jobs_*.txt
 figures/
 yemen_cholera_extended.ipynb
+results_poisson_pilot/

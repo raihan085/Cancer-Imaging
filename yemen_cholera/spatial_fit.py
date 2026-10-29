@@ -29,7 +29,7 @@ import numpy as np
 from numpy.polynomial import legendre
 from scipy.optimize import least_squares
 
-import seip, data_io, fit
+import seip, data_io, fit, baselines
 
 EPS = 1e-12
 
@@ -110,15 +110,17 @@ def main():
     ap.add_argument("--init", default="", help="pickle of a 'shared' fit to warm-start")
     ap.add_argument("--out", required=True)
     ap.add_argument("--data-dir", default="data_real")
+    ap.add_argument("--objective", default="nb", choices=["nb", "poisson"])
     a = ap.parse_args()
     if os.path.exists(a.out):
         print("exists", a.out); return
     t_all = time.time()
     panel = data_io.load_panel(a.data_dir, verbose=False)
     panel.set_weights("count")
+    panel.nb_k = baselines.nb_k_by_governorate(panel)
     grid = seip.Grid(dt=0.25, nx=41, x_max=float(np.max(panel.xg)))
     diff = seip.Diffusion(a.D, a.D, a.D, a.D)
-    prob = fit.Problem(grid, panel, objective="poisson")
+    prob = fit.Problem(grid, panel, objective=a.objective)
     sb = SpatialBeta(grid, panel, a.model)
 
     theta0 = np.zeros(sb.nparam)
@@ -152,7 +154,7 @@ def main():
     Rg = seip.R0_of_t(B1g, B2g, Sg, kap, J1, J2)
     d = slice(None, None, int(round(1 / grid.dt)))
     rd = prob.data_residual(yhat)
-    out = dict(model=a.model, D=a.D, theta=sol.x, nparam=sb.nparam,
+    out = dict(model=a.model, D=a.D, objective=a.objective, nb_k=panel.nb_k, theta=sol.x, nparam=sb.nparam,
                success=bool(sol.success), status=int(sol.status), nfev=int(sol.nfev),
                converged=bool(sol.success) and sol.status > 0,
                deviance=float(rd @ rd) * prob.dev_scale ** 2,

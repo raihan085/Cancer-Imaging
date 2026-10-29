@@ -39,6 +39,8 @@ COLUMN_HINTS = {
 }
 
 WINSOR_Q = 0.995
+# Days over which the initial-condition anchor rate is averaged (see _assemble).
+IC_WINDOW = 14.0
 # The record's window opens here (problem statement Sec. 1). Used so that a
 # cases_long.csv carrying the first wave or the 2018 resurgence does not silently
 # shift the time origin.
@@ -83,6 +85,7 @@ class Panel:
     n_winsorized: int
     true_zero: np.ndarray = None      # (ng,) structural zero seed
     first_hold: np.ndarray = None     # (ng,) first bulletin was a reporting hold
+    nb_k: np.ndarray = None           # (n_obs,) negative-binomial size per row
     provenance: dict = field(default_factory=dict)
     synthetic: bool = False
     weight_kind: str = "count"
@@ -285,7 +288,14 @@ def _assemble(df, coords, pops, winsorize, synthetic, prov=None, verbose=False):
         anyk = np.flatnonzero(keep)
         if len(pos):
             k0 = pos[0]
-            y_first[i] = float(y[k0])
+            # Anchor on the case-weighted rate over the first IC_WINDOW days from
+            # that interval, not on the interval alone: in a sparse series the
+            # first positive interval is often a batch release (Al Maharah's is
+            # 3.5x its own mean), and the IC would inherit the spike.
+            win = keep & (el[:-1] >= el[k0]) & (el[:-1] < el[k0] + IC_WINDOW)
+            span = float(np.sum(dt_[win]))
+            y_first[i] = (float(np.sum(np.maximum(dC[win], 0.0)) / (N * span))
+                          if span > 0 else float(y[k0]))
             first_hold[i] = bool(k0 != anyk[0])
         elif len(anyk):
             k0 = anyk[0]

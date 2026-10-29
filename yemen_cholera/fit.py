@@ -43,6 +43,27 @@ def softplus(z):
     return np.logaddexp(0.0, z)
 
 
+def deviance_residual(c, lam, k=None):
+    """Signed deviance residual on counts c at mean lam: Poisson when k is None,
+    negative binomial with size k (array or scalar) otherwise."""
+    c = np.asarray(c, float); lam = np.maximum(np.asarray(lam, float), 1e-10)
+    t1 = np.where(c > 0, c * np.log(np.maximum(c, 1e-300) / lam), 0.0)
+    if k is None:
+        d2 = 2.0 * (t1 - (c - lam))
+    else:
+        k = np.asarray(k, float)
+        d2 = 2.0 * (t1 - (c + k) * np.log((c + k) / (lam + k)))
+    return np.sign(c - lam) * np.sqrt(np.maximum(d2, 0.0))
+
+
+def nb_size(c, mu, lo=0.5, hi=1e4):
+    """Method-of-moments NB size from Var = mu + mu^2/k, given fitted means."""
+    c = np.asarray(c, float); mu = np.maximum(np.asarray(mu, float), 1e-9)
+    excess = np.sum((c - mu) ** 2 - mu)
+    k = np.sum(mu ** 2) / excess if excess > 0 else hi
+    return float(np.clip(k, lo, hi))
+
+
 def inv_softplus(v):
     v = np.asarray(v, float)
     return np.where(v > 20.0, v, np.log(np.expm1(np.minimum(v, 20.0))))
@@ -214,6 +235,11 @@ class Problem:
         objective, and what 82% of the objective asks for is 'predict zero'. The
         deviance has no such pathology: a zero row contributes 2*lam, which
         penalizes over-prediction without rewarding collapse.
+
+        objective='nb'       the NEGATIVE-BINOMIAL deviance residual with size k
+                             per row (panel.nb_k), Var = lam + lam^2 / k. The
+                             record is ~80x over-dispersed relative to Poisson,
+                             which the Poisson deviance reads as signal.
         """
         m = self.row_mask
         if self.objective == "wls":
@@ -221,9 +247,8 @@ class Problem:
         Ndt = self.panel.pop[self.panel.gov[m]] * (self.panel.t1[m] - self.panel.t0[m])
         lam = np.maximum(np.asarray(yhat)[m] * Ndt, 1e-10)
         c = self.panel.dC[m]
-        term = np.where(c > 0, c * np.log(np.maximum(c, 1e-300) / lam), 0.0)
-        d2 = 2.0 * (term - (c - lam))
-        return np.sign(c - lam) * np.sqrt(np.maximum(d2, 0.0)) / self.dev_scale
+        k = None if self.objective != "nb" else np.asarray(self.panel.nb_k)[m]
+        return deviance_residual(c, lam, k) / self.dev_scale
 
     def residuals(self, theta, bm, diff, X, lam_smooth, lam_ridge,
                   smooth_scale="relative"):
