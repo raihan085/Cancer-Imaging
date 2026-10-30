@@ -125,7 +125,9 @@ MAE relative to the deterministic arm:
 
 | | Al Hudaydah | Hajjah | Dhamar | Al Bayda | Hadramaut |
 |---|---|---|---|---|---|
-| DPINN | 0.98 | **0.88** | 0.95 | 0.97 | 1.09 |
+| DPINN | 0.98 | **0.88** | 0.95 | 0.97 | 1.08 |
+| DPINN-FS | 0.98 | 0.89 | 0.96 | 0.98 | 1.08 |
+| F-DPINN | 1.03 | 1.25 | 1.28 | 1.53 | 0.91 |
 | FF-PINN | 1.00 | 1.17 | 1.16 | **1.81** | 0.91 |
 | SIR baseline | 0.96 | 0.96 | 0.95 | 0.99 | 0.96 |
 | spline baseline | 0.98 | 1.01 | 1.00 | 0.99 | 0.99 |
@@ -144,8 +146,23 @@ MAE relative to the deterministic arm:
 * Seed-to-seed spread of held-out error is under 1 % for DPINN and up to 30 % for FF-PINN at Al
   Bayda: the Fourier-feature network's out-of-sample behaviour also depends more on initialisation.
 
-DPINN-FS and F-DPINN, the two cells that separate the state embedding from the $\beta$ basis, are
-the last block of the queue; their rows complete the table when it finishes.
+**The 2×2 factorial attributes the effects** (geometric-mean factors on held-out MAE; < 1 helps):
+
+| | Al Hudaydah | Hajjah | Dhamar | Al Bayda | Hadramaut | mean |
+|---|---|---|---|---|---|---|
+| Fourier-feature **states** | 1.03 | 1.36 | 1.28 | 1.70 | 0.84 | **1.21** |
+| Fourier-series **$\beta$** | 0.99 | 0.97 | 0.95 | 1.09 | 1.01 | **1.00** |
+| interaction | 0.99 | 0.96 | 0.95 | 1.08 | 1.00 | 0.99 |
+
+The Fourier-feature state embedding cuts **in-sample** error to 0.32–0.81× and raises **held-out**
+error by 1.21× on average; the $\beta$ basis does nothing either way. This reproduces the original
+study's factorial under a stricter design (negative-binomial likelihood, ten seeds, every interval
+held out once): the state embedding buys the in-sample fit by overfitting, and the choice of
+$\beta$ parameterisation is inert. The one exception is again Hadramaut, where the record is so
+sparse that extra flexibility costs nothing measurable.
+
+The two plain-state arms, DPINN and DPINN-FS, are statistically indistinguishable and the best
+held-out models at three of five governorates; the plain SIR baseline is best at Al Hudaydah.
 """
 
 TEXT["bands"] = r"""
@@ -497,4 +514,60 @@ are not conserved, so nothing anchors it. Checking $S(0)-S(T)$ against the attac
 test any physics-informed fit of this system should report.
 """
 
-TEXT["conclusions"] = "## 13. What the extended analysis shows\n\n" + PENDING
+TEXT["conclusions"] = r"""
+## 13. What the extended analysis shows
+
+**1. For predicting bulletins, simple models are as good as anything here.** Out of sample, the
+plain-state DPINN beats the deterministic SEIP solver by 2–12 % at four of five governorates, and the
+plain SIR model gets most of that margin (1–5 %) everywhere it was fitted. No arm improves on a
+penalised spline by more than about 13 %. Most of the remaining error is reporting: residuals show
+the negative lag-1 autocorrelation of batch releases (§7), visible as vertical stripes in every
+surface (§11).
+
+**2. Fourier-feature state networks overfit; the $\beta$ basis is irrelevant.** The 2×2 factorial
+with ten seeds and a rotated four-fold holdout (§2) attributes the entire in-sample gain and the
+entire out-of-sample loss to the state embedding (×1.21 held-out on average), and nothing to the
+$\beta$ basis (×1.00). The between-arm differences are 2–20× the seed-to-seed noise (§1).
+
+**3. The reproduction number is identified by the data, and the deterministic solver recovers it;
+the PINNs do not.** On synthetic data with a known, literature-calibrated $\mathcal R(t)$, the
+solver recovers it to 8–10 %; DPINN is off by 174–311 % and FF-PINN by 100 % (§4). On the real
+record the solver's $\mathcal R(t)$ agrees with the model-free Cori/EpiEstim estimate after the
+first three weeks (median log-ratio −0.01) and with the published Yemen picture: about 1 over the
+summer, below 1 by October (§5). Every PINN arm puts $\mathcal R(t)$ 2–50× above the reference, and
+its value moves by up to two orders of magnitude with the renewal-coupling weight alone (§6).
+
+**4. The reason is a failed conservation law, and it is cheap to test.** Because every infection is
+a reported case, susceptible depletion must equal the attack rate. The solver satisfies this to
+within 0–11 %; every PINN arm violates it, in both directions, by factors from 0.02 to 20 and more
+(§12). A soft-physics fit can make susceptibles vanish without cases, or cases appear without
+depletion, and $\mathcal R(t)$, which scales with $S$, inherits that freedom. Hard initial
+conditions and a better likelihood do not close it; this check should accompany any PINN estimate
+of $\mathcal R$ for this system.
+
+**5. The route split (human vs environmental) is not identified by case counts.** It swings from 0
+to 0.9 across sensitivity variants at a single governorate, is not recovered from synthetic data by
+any method (a 20 % truth returns 25–64 % from the solver), and FF-PINN returns 71 % whatever the
+truth is (§4, §6). Reporting $\beta_1$ and $\beta_2$ separately requires data that separates the
+routes, such as environmental *Vibrio* sampling or water-source information.
+
+**6. Space: a governorate network beats diffusion along distance from Sana'a.** One SEIP node per
+governorate, coupled by gravity mixing on real distances, lowers the AIC by 8,800 against the
+original shared-$\beta$ diffusion model and removes the level biases (all governorates within
+0.76–1.32 of their observed mean, against 0.31–5.12). Most of the gain is the geometry itself; the
+estimated mixing is small (0.76 %) but significant (§10).
+
+**7. The data are sound.** The record's attack rates are within 2–6 % of WHO EMRO's second-wave
+figures (§4), and the residual over-dispersion (about 70× Poisson) is handled by the
+negative-binomial likelihood now used throughout (§7).
+
+**Recommended for the paper:** report the deterministic solver (or its network extension) for
+$\mathcal R(t)$, with the delta-method band and the Cori comparison; report PINN results as a
+fitting method only, alongside the mass-balance check; do not report the route split as estimated.
+
+**Limits.** Five focus governorates for the PINN arms (all 21 for the solver and baselines);
+diffusion and mixing parameters were swept or estimated only in the deterministic spatial models;
+the serial interval for the reference $R_t$ comes from other outbreaks; second wave only; the
+literature comparison is against published summaries rather than the original estimates, which
+this session could not download.
+"""
