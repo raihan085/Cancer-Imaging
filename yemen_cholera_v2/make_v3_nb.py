@@ -86,6 +86,11 @@ subprocess.run([sys.executable, os.path.join(HERE, "collect_holdout.py"),
 i = cell_index("%%writefile data_io.py")
 nb.cells[i].source = "%%writefile data_io.py\n" + open(os.path.join(HERE, "data_io.py")).read()
 
+i = cell_index("%%writefile fit.py")
+sys.path.insert(0, HERE)
+import fit_patch  # noqa: E402
+nb.cells[i].source = "%%writefile fit.py\n" + fit_patch.apply(nb.cells[i].source.split("\n", 1)[1])
+
 i = cell_index("%%writefile holdout.py")
 new_cells = [nbf.v4.new_code_cell("%%writefile domain_det.py\n" +
                                   open(os.path.join(HERE, "domain_det.py")).read()),
@@ -99,7 +104,7 @@ replace_in(i, 'NOTE = {"det": " (stopped at max_nfev: NOT converged)"}\n',
 
 def note(d):
     """Label a fit that did not converge; PINN fits carry no flag and get none."""
-    return " (stopped at max_nfev: NOT converged)" if d.get("converged") is False else ""
+    return " (NOT converged)" if d.get("converged") is False else ""
 ''')
 replace_in(i, 'rows.append(dict(arm=a, method=nice + NOTE.get(a, ""),',
            'rows.append(dict(arm=a, method=nice + note(d),')
@@ -226,7 +231,8 @@ replace_in(i, "> defect was found in external review.\n", f"""> defect was found
 > cut moves from 1.2102e-03 to 1.2114e-03. Among the fitted governorates only Amran has a changed
 > row, so Amran's per-city and holdout fits are rerun; the other three are unchanged. The
 > deterministic full-domain fit of Section 13, which had stopped at `max_nfev`, is rerun with
-> `domain_det.py` and {'converges' if det_conv else 'still stops at `max_nfev`'} ({det.get('nfev')} evaluations). The four PINN
+> `domain_det.py` and {'converges' if det_conv else 'still does not converge'} ({det.get('nfev')} evaluations over {len(det.get('history', []))}
+> passes, each restarted from the last until the objective stops falling). The four PINN
 > domain fits are kept and rescored against the rebuilt rates.
 """)
 
@@ -333,8 +339,8 @@ start = s.index("## 17. What the comparison shows")
 domain_limit = (f"The deterministic full-domain arm is run to convergence ({det.get('nfev')} evaluations); the four PINN "
                 "domain fits predate the rebuilt rates and are rescored, not refitted."
                 if det_conv else
-                "The deterministic full-domain arm stopped at `max_nfev` and is reported as not converged; its domain row "
-                "is a lower bound on that arm's attainable fit.")
+                "The deterministic full-domain arm does not converge even with restarts and is reported as not "
+                "converged; its domain row understates how well that arm can fit.")
 nb.cells[i].source = s[:start] + f"""## 17. What the comparison shows
 
 All numbers below are from the repaired panel (2,806 intervals); every earlier figure fitted on the
