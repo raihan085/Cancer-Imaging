@@ -305,16 +305,12 @@ def _assemble(df, coords, pops, winsorize, synthetic, prov=None, verbose=False):
             raise ValueError("need a cumulative or new-case column")
         dt_ = np.diff(el)
         keep = dt_ > 0
-        # The file's own rate where it survives (duplicate-date merging drops the
-        # column, and then the rate is rebuilt from the merged cumulative).
-        # NOTE: cases_long.csv pre-caps 15 rows at 1.2114e-3 (its incidence_rate_raw
-        # column holds the uncapped value), so y_raw below is not raw for those
-        # rows. It does not change any fit: the loader's own winsor cut, 1.2102e-3,
-        # lies just below the file's cap, so y after winsorisation is identical.
-        if "incidence_rate" in sub.columns:
-            y = sub["incidence_rate"].to_numpy(float)[1:]
-        else:
-            y = np.where(keep, dC / (N * np.where(keep, dt_, 1.0)), 0.0)
+        # The rate is always rebuilt from the case increments, so y and dC cannot
+        # disagree. cases_long.csv's incidence_rate column is pre-capped at
+        # 1.2114e-3 in 15 rows (incidence_rate_raw holds the uncapped values), so
+        # reading it would make y_raw not raw there and set the winsor cut from
+        # capped values; the loader's own winsorisation below is the only cap.
+        y = np.where(keep, dC / (N * np.where(keep, dt_, 1.0)), 0.0)
         for k in np.flatnonzero(keep):
             rows.append((i, el[k], el[k + 1], y[k], max(dC[k], 0.0)))
         # The IC anchor must be the first interval that actually OBSERVES
