@@ -5,6 +5,7 @@ increments (fix 1) and the deterministic full-domain fit run to convergence (fix
     python make_v3_nb.py V2.ipynb RUN_DIR OUT.ipynb
 
 V2.ipynb  yemen_cholera_dpinn_vs_ffpinn_final.ipynb as delivered in revision 3
+          (git show dd5d625:yemen_cholera_v2/yemen_cholera_dpinn_vs_ffpinn_final.ipynb)
 RUN_DIR   a directory holding
             real_fits/<city>/{det,dpinn,ff}.pkl      (Amran refitted on the new panel)
             holdout_rerun/amran/*.pkl                (holdout.py, Amran, 5 arms x seeds)
@@ -258,6 +259,16 @@ Section 13, a different model).""", f"""Al Hudaydah spans 0.68–6.87 (the 0.84�
 full-domain fit of Section 13, a different model; {'run to convergence' if det_conv else 'rerun with a larger budget'}, that fit spans
 {DR['det']['R0min']:.2f}–{DR['det']['R0max']:.2f}).""")
 
+starts_par = ""
+if det.get("starts"):
+    st = sorted([z for z in det["starts"] if z["cost"] < 2 * det["cost"]], key=lambda z: z["cost"])
+    worst = st[-1]
+    starts_par = (f"**The deterministic route split is not identified on the domain either.** The fit is "
+                  f"multi-started from {len(det['starts'])} values of $\\beta_{{20}}$. The best start ends with an environmental share of "
+                  f"{st[0]['env_share']:.2f}; one ending within {100 * (worst['cost'] / st[0]['cost'] - 1):.1f} % of its objective "
+                  f"has a share of {worst['env_share']:.2f}. "
+                  "The data fix the total transmission, not how it divides between the routes.\n\n")
+
 i = find_md("Three things change once the model is spatial.")
 dom_nrmse = [DR[a]["nRMSE"] for a in DOM]
 nb.cells[i].source = f"""Three things change once the model is spatial.
@@ -278,7 +289,7 @@ rules out. The deterministic arm, {'now run to convergence' if det_conv else 'st
 
 On the residual panel the two far governorates look grossly over-predicted. The cell above shows
 they are not: Hadramaut and Al Maharah carry {far_share['dpinn']:.1f} % (DPINN), {far_share['ff']:.1f} % (FF-PINN) and
-{far_share['det']:.1f} % (deterministic) of total absolute error against a {far_rows:.1f} % share of rows. The logarithmic
+{far_share['det']:.1f} % (deterministic) of total absolute error against an {far_rows:.1f} % share of rows. The logarithmic
 colour floor exaggerates them. The error concentrates in the mid-range high-incidence governorates,
 and the informative pattern there is systematic per-governorate **bias** in the deterministic arm —
 {', '.join(f'{k} {v:.1e}'.replace(' -', ' −', 1) for k, v in det_neg.items())} — against FF-PINN biases
@@ -286,7 +297,7 @@ and the informative pattern there is systematic per-governorate **bias** in the 
 heterogeneity; the network absorbs into its free states what the shared parameter cannot. That is an
 argument for a spatially varying $\\beta(t,x)$, which this methodology does not currently have.
 
-The four PINN domain fits predate the rebuilt rates (they were trained on the capped column, which
+{starts_par}The four PINN domain fits predate the rebuilt rates (they were trained on the capped column, which
 differs by at most 0.1 % in 15 of 2,806 rows) and are scored here against the rebuilt rates; the
 deterministic domain fit was rerun on them.
 """
