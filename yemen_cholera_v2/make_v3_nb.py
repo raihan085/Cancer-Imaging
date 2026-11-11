@@ -143,14 +143,6 @@ with tarfile.open(fileobj=buf, mode="w:gz", compresslevel=9) as tf:
             tf.addfile(ti, io.BytesIO(raw))
 nb.cells[cell_index("FITS_B64")].source = 'FITS_B64 = """' + base64.b64encode(buf.getvalue()).decode() + '"""'
 
-# ===================================================== 3. NEW_B64
-buf = io.BytesIO()
-with tarfile.open(fileobj=buf, mode="w:gz", compresslevel=9) as tf:
-    tf.add(NS, arcname="new_slim", recursive=False)
-    for f in [f"domain_{a}.pkl" for a in DOM] + ["holdout_and_sweep.csv"]:
-        tf.add(os.path.join(NS, f), arcname=f"new_slim/{f}")
-nb.cells[cell_index("NEW_B64")].source = 'NEW_B64 = """' + base64.b64encode(buf.getvalue()).decode() + '"""'
-
 # ===================================================== 4. numbers
 row = lambda c, a: fits[(c, a)]["row"]
 ff_gain = [row(c, "dpinn")["MAE"] / row(c, "ff")["MAE"] for c in CITIES]
@@ -201,7 +193,23 @@ def dom_row(a):
 
 
 DR = {a: dom_row(a) for a in DOM}
-det_conv = bool(det.get("converged"))
+
+
+def deviance(yh):
+    yh = np.maximum(np.asarray(yh, float), 1e-300)
+    yy = np.asarray(panel.y)
+    return 2 * np.sum(np.where(yy > 0, yy * np.log(np.maximum(yy, 1e-300) / yh), 0.0) - (yy - yh))
+
+
+old_det = pickle.load(open(os.path.join(RUN, "new_slim", "domain_det.pkl"), "rb"))
+dev_old, dev_new = deviance(old_det["yhat"]), deviance(det["yhat"])
+# a termination flag alone is not trusted: the fit must also be no worse than the
+# revision-3 fit that stopped at max_nfev
+det_conv = bool(det.get("converged")) and dev_new <= dev_old * (1 + 1e-6)
+if det.get("converged") and not det_conv:
+    det["converged"] = False
+    pickle.dump(det, open(os.path.join(NS, "domain_det.pkl"), "wb"))
+print(f"domain det deviance: rev3 {dev_old:.6e}  new {dev_new:.6e}  -> converged={det_conv}")
 y = panel.y; gov = panel.gov; xg = np.asarray(panel.xg)
 far = np.isin(gov, [g for g in range(len(panel.names)) if xg[g] > 400])
 far_rows = 100 * far.mean()
@@ -220,6 +228,14 @@ print("F-DPINN lowest in-sample at", fd_lowest, "beaten by", fd_beaten_by)
 print("domain", {a: {k: round(v, 4) for k, v in r.items()} for a, r in DR.items()})
 print("det domain converged", det_conv, det.get("status"), det.get("nfev"), round(det["seconds"]))
 print("far share", far_share, "| det neg bias", det_neg.to_dict(), "| bias ratio", bias_ratio)
+
+# ===================================================== 3. NEW_B64
+buf = io.BytesIO()
+with tarfile.open(fileobj=buf, mode="w:gz", compresslevel=9) as tf:
+    tf.add(NS, arcname="new_slim", recursive=False)
+    for f in [f"domain_{a}.pkl" for a in DOM] + ["holdout_and_sweep.csv"]:
+        tf.add(os.path.join(NS, f), arcname=f"new_slim/{f}")
+nb.cells[cell_index("NEW_B64")].source = 'NEW_B64 = """' + base64.b64encode(buf.getvalue()).decode() + '"""'
 
 # ===================================================== 5. text
 i = find_md("> **Data correction, third revision.**")
